@@ -395,6 +395,7 @@ private fun RuntimeEngineStatusCard(
             },
             arm64WineInstalled = false,
             box64Installed = false,
+            prootInstalled = false,
             d3d11Requested = true,
             dxvkInstalled = false,
             vulkan = vulkan

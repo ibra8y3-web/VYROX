@@ -35,6 +35,7 @@ class RuntimeCatalogTest {
         })
         assertEquals("MIT", RuntimeEngineCatalog.find("box64")?.license)
         assertEquals("MIT", RuntimeEngineCatalog.find("fex")?.license)
+        assertEquals("GPL-2.0-or-later", RuntimeEngineCatalog.find("proot")?.license)
     }
 
     @Test
@@ -101,6 +102,7 @@ class RuntimeCatalogTest {
                 x86_64RootFsInstalled = false,
                 arm64WineInstalled = false,
                 box64Installed = false,
+                prootInstalled = false,
                 d3d11Requested = true,
                 dxvkInstalled = false,
                 vulkan = VulkanProbeParser.parse(null)
@@ -110,6 +112,7 @@ class RuntimeCatalogTest {
         assertTrue(readiness.blockers.any { it.contains("Linux userland") })
         assertTrue(readiness.blockers.any { it.contains("Wine") })
         assertTrue(readiness.blockers.any { it.contains("Box64") })
+        assertTrue(readiness.blockers.any { it.contains("PRoot") })
         assertTrue(readiness.blockers.any { it.contains("DXVK") })
         assertTrue(readiness.blockers.any { it.contains("PE loader") })
         assertTrue(readiness.blockers.any { it.contains("physical-device") })
@@ -124,6 +127,7 @@ class RuntimeCatalogTest {
                 x86_64RootFsInstalled = true,
                 arm64WineInstalled = true,
                 box64Installed = true,
+                prootInstalled = true,
                 d3d11Requested = true,
                 dxvkInstalled = true,
                 vulkan = completeVulkan(),

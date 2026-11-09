@@ -65,6 +65,18 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
         return if (root.isDirectory) readInfo(root) else null
     }
 
+    fun getRootFsDirectory(
+        capsuleId: String,
+        architecture: LinuxRootFsArchitecture
+    ): File? {
+        val capsule = resolveCapsule(capsuleId)
+        val linuxDirectory = File(capsule, LINUX_DIRECTORY_NAME).canonicalFile
+        val root = File(linuxDirectory, rootFsDirectoryName(architecture)).canonicalFile
+        return root.takeIf {
+            it.parentFile == linuxDirectory && it.isDirectory && readInfo(it) != null
+        }
+    }
+
     @Throws(IOException::class, IllegalArgumentException::class)
     fun importArchive(
         capsuleId: String,

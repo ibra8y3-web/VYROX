@@ -33,6 +33,15 @@ object RuntimeEngineCatalog {
             notes = "Requires an Android-compatible Unix userland and a tested ARM64 build."
         ),
         RuntimeEngineDescriptor(
+            id = "proot",
+            name = "PRoot",
+            role = "Rootless Linux userland and filesystem redirection",
+            upstreamUrl = "https://github.com/proot-me/proot",
+            license = "GPL-2.0-or-later",
+            integrationState = EngineIntegrationState.RESEARCH_ONLY,
+            notes = "Uses ptrace. Android integration needs a Bionic-compatible, Termux-derived build and device testing."
+        ),
+        RuntimeEngineDescriptor(
             id = "box64",
             name = "Box64",
             role = "x86-64 Linux user-space translation",
@@ -164,6 +173,7 @@ data class X64RuntimePrerequisites(
     val x86_64RootFsInstalled: Boolean,
     val arm64WineInstalled: Boolean,
     val box64Installed: Boolean,
+    val prootInstalled: Boolean,
     val d3d11Requested: Boolean,
     val dxvkInstalled: Boolean,
     val vulkan: VulkanProbe,
@@ -194,6 +204,9 @@ object RuntimeCompatibilityPlanner {
             }
             if (!prerequisites.arm64WineInstalled) {
                 add("An ARM64 Wine build has not been integrated.")
+            }
+            if (!prerequisites.prootInstalled) {
+                add("PRoot has not been built and integrated for Android.")
             }
             if (!prerequisites.box64Installed) {
                 add("Box64 has not been built and integrated for the selected userland.")
