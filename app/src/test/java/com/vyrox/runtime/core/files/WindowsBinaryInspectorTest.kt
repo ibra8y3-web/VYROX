@@ -63,8 +63,8 @@ class WindowsBinaryInspectorTest {
         RandomAccessFile(file, "rw").use { output ->
             output.setLength(0x80L + 26L)
             output.seek(0)
-            output.write('M')
-            output.write('Z')
+            output.write('M'.code)
+            output.write('Z'.code)
             output.seek(0x3C)
             writeIntLE(output, 0x80)
             output.seek(0x80)
