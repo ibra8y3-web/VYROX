@@ -119,7 +119,7 @@ class CapsuleStorage(private val capsuleRoot: File) {
             ?: throw IOException("Could not read the Capsule directory.")
 
         return children
-            .filter { !it.name.startsWith(".") }
+            .filter { !it.name.startsWith(".vyrox-import-") }
             .sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
             .map { child ->
                 CapsuleFileEntry(
@@ -151,8 +151,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
         if (destination.parentFile != parent.canonicalFile || !isWithinRoot(driveRoot, destination)) {
             throw IllegalArgumentException("The folder name is not valid for this location.")
         }
-        if (destination.exists()) {
-            throw IOException("An item with this name already exists.")
+        if (hasCaseInsensitiveSibling(parent, name)) {
+            throw IOException("An item with this name already exists (Windows ignores name casing).")
         }
         if (!destination.mkdir()) {
             throw IOException("Could not create the Capsule folder.")
@@ -187,8 +187,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
         if (destination.parentFile != parent.canonicalFile || !isWithinRoot(driveRoot, destination)) {
             throw IllegalArgumentException("The file name is not valid for this location.")
         }
-        if (destination.exists()) {
-            throw IOException("An item with this name already exists.")
+        if (hasCaseInsensitiveSibling(parent, name)) {
+            throw IOException("An item with this name already exists (Windows ignores name casing).")
         }
 
         val temporaryFile = File(parent, ".vyrox-import-" + UUID.randomUUID() + ".part")
@@ -264,9 +264,19 @@ class CapsuleStorage(private val capsuleRoot: File) {
         val segments = normalized.split('/')
         if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
 
-        val candidate = File(driveRoot, segments.joinToString(File.separator)).canonicalFile
-        return candidate.takeIf { isWithinRoot(driveRoot, it) }
+        var candidate = driveRoot.canonicalFile
+        for (segment in segments) {
+            val match = candidate.listFiles()
+                ?.firstOrNull { it.name.equals(segment, ignoreCase = true) }
+                ?: return null
+            candidate = match.canonicalFile
+            if (!isWithinRoot(driveRoot, candidate)) return null
+        }
+        return candidate
     }
+
+    private fun hasCaseInsensitiveSibling(parent: File, name: String): Boolean =
+        parent.listFiles().orEmpty().any { it.name.equals(name, ignoreCase = true) }
 
     private fun isWithinRoot(root: File, candidate: File): Boolean {
         val rootPath = root.canonicalPath

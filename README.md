@@ -67,6 +67,7 @@ app/src/main/
       InstallerStorage.kt
     core/capsule/
       CapsulePolicy.kt
+      CapsuleFilePolicy.kt
       CapsuleStorage.kt
     core/host/
       HostCapabilities.kt

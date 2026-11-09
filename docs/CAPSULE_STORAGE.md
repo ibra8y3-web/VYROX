@@ -30,6 +30,8 @@ The initial file-backed layout is:
 - `CapsuleStorage.getDriveRoot(id, 'D')` returns the directory backing the
   D: data workspace.
 - `listDirectory` lists files and folders without exposing paths outside that drive.
+  Path lookup is case-insensitive, and names that differ only by letter case
+  cannot be created as separate Windows entries.
 - `createDirectory` creates one validated child folder.
 - `importFile` copies a SAF-provided stream through a temporary file, enforces a
   2 GiB size limit, and refuses to overwrite an existing name.

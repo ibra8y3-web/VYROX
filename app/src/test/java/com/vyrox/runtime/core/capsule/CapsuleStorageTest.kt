@@ -84,6 +84,35 @@ class CapsuleStorageTest {
     }
 
     @Test
+    fun resolvesPathsWithoutCaseAndRejectsCaseOnlyDuplicates() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Case handling")
+        storage.createDirectory(capsule.id, 'D', "Downloads", "Projects")
+
+        assertTrue(storage.listDirectory(capsule.id, 'D', "downloads/projects").isEmpty())
+
+        var duplicateRejected = false
+        try {
+            storage.createDirectory(capsule.id, 'D', "Downloads", "projects")
+        } catch (_: java.io.IOException) {
+            duplicateRejected = true
+        }
+        assertTrue(duplicateRejected)
+    }
+
+    @Test
+    fun keepsUserDotFilesVisibleInTheCapsuleExplorer() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Dot files")
+        storage.createDirectory(capsule.id, 'D', "Downloads", ".config")
+
+        assertEquals(
+            listOf(".config"),
+            storage.listDirectory(capsule.id, 'D', "Downloads").map { it.name }
+        )
+    }
+
+    @Test
     fun rejectsCapsuleFilePathTraversalAndWindowsInvalidNames() {
         val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
         val capsule = storage.createCapsule("Safe paths")
