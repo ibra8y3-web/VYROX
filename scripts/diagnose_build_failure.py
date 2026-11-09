@@ -25,7 +25,7 @@ ERROR_PATTERNS = [
 CATEGORY_RULES: list[tuple[str, tuple[str, ...], str]] = [
     (
         "Kotlin source compilation",
-        (r"^e:\s+file://", r"compile\w*kotlin", r"Compilation error"),
+        (r"^e:\s+file://", r"Compilation error", r"> Task .*compile.*Kotlin FAILED"),
         "Open the first Kotlin source location shown in the report. Fix the source-level compiler error and add or update a unit test when practical.",
     ),
     (
