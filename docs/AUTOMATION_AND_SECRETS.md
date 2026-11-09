@@ -5,10 +5,12 @@
 The Android CI workflow runs on pushes to `main`, pull requests targeting
 `main`, and manual dispatch. It executes:
 
-1. JVM unit tests.
-2. Android lint.
-3. Debug APK assembly.
-4. APK artifact upload after all checks pass.
+1. Python unit tests for the diagnostic parser.
+2. JVM unit tests.
+3. Android lint.
+4. Debug APK assembly.
+5. APK artifact upload after all checks pass.
+6. On failure, a deterministic Markdown diagnostic artifact containing first error clues, failed Gradle tasks, and recent log lines.
 
 Dependabot checks Gradle dependencies and GitHub Actions versions weekly and
 opens pull requests for updates.
@@ -16,15 +18,14 @@ opens pull requests for updates.
 ## What CI does not do
 
 A failed build does not automatically authorize a bot to rewrite application
-source code. The workflow currently reports the failing step in its run log;
-a code change must be reviewed, committed, and rebuilt. This prevents a
+source code. The workflow generates a deterministic diagnostic artifact from the captured Gradle log. It identifies likely failure categories and source locations, but it does not write or commit application code. A code change must still be produced, reviewed, committed, and rebuilt. This prevents a
 misdiagnosed log line or an untrusted build artifact from silently changing
 the application.
 
 A model-powered repair workflow would require a separately configured API
 credential, explicit spending limits, narrowly scoped repository permissions,
-and safeguards that validate proposed patches. No model API key is needed for
-the current Android build, and none is stored in this repository.
+and safeguards that validate proposed patches. No model API key is required for
+the deterministic diagnostic report, and none is stored in this repository.
 
 ## Secrets policy
 

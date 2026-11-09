@@ -22,6 +22,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Initial JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
 - Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, and deletion.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
+- Deterministic build-failure diagnostic report uploaded as a separate artifact when CI fails.
 
 These features are implemented in source. GitHub Actions is the verification gate; no feature is described as build-verified until a passing run confirms it.
 
@@ -52,12 +53,14 @@ Run from the repository root after installing the Android SDK platform and Gradl
 gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact. Dependabot checks Gradle and GitHub Actions dependencies weekly.
+GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact. When a job fails, it captures Gradle output, generates a diagnostic Markdown report, and uploads `vyrox-build-diagnostic`. Dependabot checks Gradle and GitHub Actions dependencies weekly.
 
 ## Structure
 
 ```text
 .github/workflows/android.yml
+scripts/diagnose_build_failure.py
+scripts/tests/test_diagnose_build_failure.py
 app/src/main/
   AndroidManifest.xml
   java/com/vyrox/runtime/

@@ -41,8 +41,28 @@ jobs:
       - name: Install Android platform and build tools
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
 
+      - name: Test build diagnostic parser
+        run: python3 -m unittest discover -s scripts/tests -p "test_*.py"
+
       - name: Run unit tests, lint, and assemble debug APK
-        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        run: |
+          set -o pipefail
+          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee "$RUNNER_TEMP/vyrox-gradle-build.log"
+
+      - name: Generate build failure diagnostic
+        if: failure()
+        run: |
+          python3 scripts/diagnose_build_failure.py --input "$RUNNER_TEMP/vyrox-gradle-build.log" --output "$RUNNER_TEMP/vyrox-build-diagnostic.md" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          cat "$RUNNER_TEMP/vyrox-build-diagnostic.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build failure diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vyrox-build-diagnostic
+          path: ${{ runner.temp }}/vyrox-build-diagnostic.md
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
