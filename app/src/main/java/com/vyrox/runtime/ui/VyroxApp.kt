@@ -41,6 +41,8 @@ import com.vyrox.engine.RuntimeCompatibilityPlanner
 import com.vyrox.engine.RuntimeEngineCatalog
 import com.vyrox.engine.VulkanProbeParser
 import com.vyrox.engine.X64RuntimePrerequisites
+import com.vyrox.engine.LinuxRootFsInfo
+import com.vyrox.engine.LinuxRootFsArchitecture
 import java.util.Locale
 
 private val VyroxColors = darkColorScheme(
@@ -61,6 +63,7 @@ fun VyroxApp(
     currentPath: String,
     capsuleEntries: List<CapsuleFileEntry>,
     capsuleSearchResults: List<CapsuleFileEntry>,
+    rootFsImages: List<LinuxRootFsInfo>,
     hostCapabilities: HostCapabilities,
     isImporting: Boolean,
     statusMessage: String?,
@@ -79,7 +82,9 @@ fun VyroxApp(
     onCopyCapsuleEntry: (CapsuleFileEntry, String) -> Unit,
     onMoveCapsuleEntry: (CapsuleFileEntry, String) -> Unit,
     onSearchCapsuleEntries: (String) -> Unit,
-    onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit
+    onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
+    onImportRootFs: () -> Unit,
+    onRemoveRootFs: (LinuxRootFsInfo) -> Unit
 ) {
     var capsuleName by remember { mutableStateOf("") }
     var folderName by remember(selectedCapsule?.id, selectedDrive, currentPath) {
@@ -118,7 +123,7 @@ fun VyroxApp(
 
 
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities)
+                RuntimeEngineStatusCard(hostCapabilities, rootFsImages)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -177,6 +182,7 @@ fun VyroxApp(
                         currentPath = currentPath,
                         entries = capsuleEntries,
                         searchResults = capsuleSearchResults,
+                        rootFsImages = rootFsImages,
                         folderName = folderName,
                         destinationPath = destinationPath,
                         searchQuery = searchQuery,
@@ -186,6 +192,8 @@ fun VyroxApp(
                         onSearchQueryChange = { searchQuery = it },
                         onSearch = { onSearchCapsuleEntries(searchQuery) },
                         onSelectSearchResult = onSelectCapsuleSearchResult,
+                        onImportRootFs = onImportRootFs,
+                        onRemoveRootFs = onRemoveRootFs,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -371,13 +379,20 @@ fun VyroxApp(
 
 
 @Composable
-private fun RuntimeEngineStatusCard(profile: HostCapabilities) {
+private fun RuntimeEngineStatusCard(
+    profile: HostCapabilities,
+    rootFsImages: List<LinuxRootFsInfo>
+) {
     val vulkan = VulkanProbeParser.parse(profile.nativeVulkanInfo)
     val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
         X64RuntimePrerequisites(
             hostAbis = profile.supported64BitAbis.toSet(),
-            linuxUserlandInstalled = false,
-            x86_64RootFsInstalled = false,
+            linuxUserlandInstalled = rootFsImages.any {
+                it.architecture == LinuxRootFsArchitecture.ARM64
+            },
+            x86_64RootFsInstalled = rootFsImages.any {
+                it.architecture == LinuxRootFsArchitecture.X86_64
+            },
             arm64WineInstalled = false,
             box64Installed = false,
             d3d11Requested = true,
@@ -494,6 +509,7 @@ private fun CapsuleExplorerCard(
     currentPath: String,
     entries: List<CapsuleFileEntry>,
     searchResults: List<CapsuleFileEntry>,
+    rootFsImages: List<LinuxRootFsInfo>,
     folderName: String,
     destinationPath: String,
     searchQuery: String,
@@ -503,6 +519,8 @@ private fun CapsuleExplorerCard(
     onSearchQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onSelectSearchResult: (CapsuleFileEntry) -> Unit,
+    onImportRootFs: () -> Unit,
+    onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -578,6 +596,56 @@ private fun CapsuleExplorerCard(
                         onClick = { onNavigate(currentPath.substringBeforeLast('/', "")) }
                     ) {
                         Text("Up")
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Linux RootFS", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Separate Linux file systems used later by the compatibility runtime. Importing one does not install Wine or start Linux processes.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(onClick = onImportRootFs, enabled = !isImporting) {
+                        Text(if (isImporting) "Importing RootFS..." else "Import Linux RootFS archive")
+                    }
+                    if (rootFsImages.isEmpty()) {
+                        Text(
+                            "No Linux RootFS installed in this Capsule.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        rootFsImages.forEach { rootFs ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(rootFs.prettyName, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        rootFs.architecture.label + " • " +
+                                            rootFs.distributionId + " " + rootFs.versionId +
+                                            " • " + formatBytes(rootFs.expandedBytes),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                OutlinedButton(onClick = { onRemoveRootFs(rootFs) }) {
+                                    Text("Remove")
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -18,6 +18,8 @@ import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
 import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.runtime.core.host.HostCapabilitiesProbe
+import com.vyrox.engine.LinuxRootFsInfo
+import com.vyrox.engine.LinuxRootFsManager
 import com.vyrox.runtime.ui.VyroxApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,15 +31,18 @@ class MainActivity : ComponentActivity() {
     private lateinit var installerStorage: InstallerStorage
     private lateinit var capsuleStorage: CapsuleStorage
     private lateinit var hostCapabilities: HostCapabilities
+    private lateinit var rootFsManager: LinuxRootFsManager
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
     private val capsuleEntries = mutableStateListOf<CapsuleFileEntry>()
     private val capsuleSearchResults = mutableStateListOf<CapsuleFileEntry>()
+    private val rootFsImages = mutableStateListOf<LinuxRootFsInfo>()
 
     private var selectedCapsule by mutableStateOf<CapsuleInfo?>(null)
     private var selectedDrive by mutableStateOf('C')
     private var selectedPath by mutableStateOf("")
     private var pendingCapsuleImport: CapsuleImportTarget? = null
+    private var pendingRootFsCapsuleId: String? = null
 
     private var isImporting by mutableStateOf(false)
     private var statusMessage by mutableStateOf<String?>(null)
@@ -56,11 +61,20 @@ class MainActivity : ComponentActivity() {
         if (uri != null && target != null) importIntoCapsule(uri, target)
     }
 
+    private val openRootFsArchive = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val capsuleId = pendingRootFsCapsuleId
+        pendingRootFsCapsuleId = null
+        if (uri != null && capsuleId != null) importRootFsArchive(uri, capsuleId)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         installerStorage = InstallerStorage(applicationContext)
         capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
+        rootFsManager = LinuxRootFsManager(File(filesDir, "capsules"))
         hostCapabilities = HostCapabilitiesProbe.read(applicationContext)
         installers.addAll(installerStorage.listImported())
         capsules.addAll(capsuleStorage.listCapsules())
@@ -74,6 +88,7 @@ class MainActivity : ComponentActivity() {
                 currentPath = selectedPath,
                 capsuleEntries = capsuleEntries.toList(),
                 capsuleSearchResults = capsuleSearchResults.toList(),
+                rootFsImages = rootFsImages.toList(),
                 hostCapabilities = hostCapabilities,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
@@ -94,7 +109,9 @@ class MainActivity : ComponentActivity() {
                 onCopyCapsuleEntry = ::copyCapsuleEntry,
                 onMoveCapsuleEntry = ::moveCapsuleEntry,
                 onSearchCapsuleEntries = ::searchCapsuleEntries,
-                onSelectCapsuleSearchResult = ::selectCapsuleSearchResult
+                onSelectCapsuleSearchResult = ::selectCapsuleSearchResult,
+                onImportRootFs = ::requestRootFsImport,
+                onRemoveRootFs = ::removeRootFs
             )
         }
     }
@@ -183,7 +200,9 @@ class MainActivity : ComponentActivity() {
         selectedPath = ""
         capsuleEntries.clear()
         capsuleSearchResults.clear()
+        rootFsImages.clear()
         refreshCapsuleDirectory()
+        refreshRootFsImages()
     }
 
     private fun closeCapsuleExplorer() {
@@ -191,6 +210,7 @@ class MainActivity : ComponentActivity() {
         selectedPath = ""
         capsuleEntries.clear()
         capsuleSearchResults.clear()
+        rootFsImages.clear()
     }
 
     private fun selectCapsuleDrive(driveLetter: Char) {
@@ -343,6 +363,73 @@ class MainActivity : ComponentActivity() {
             entry.relativePath.substringBeforeLast('/', "")
         }
         navigateCapsuleDirectory(targetPath)
+    }
+
+    private fun refreshRootFsImages() {
+        val capsule = selectedCapsule ?: return
+        lifecycleScope.launch {
+            try {
+                val installed = withContext(Dispatchers.IO) {
+                    rootFsManager.listInstalled(capsule.id)
+                }
+                if (selectedCapsule?.id == capsule.id) {
+                    rootFsImages.clear()
+                    rootFsImages.addAll(installed)
+                }
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not read installed Linux RootFS images."
+            }
+        }
+    }
+
+    private fun requestRootFsImport() {
+        val capsule = selectedCapsule ?: return
+        if (isImporting) return
+        pendingRootFsCapsuleId = capsule.id
+        openRootFsArchive.launch(arrayOf("*/*"))
+    }
+
+    private fun importRootFsArchive(uri: Uri, capsuleId: String) {
+        if (isImporting) return
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Importing and validating Linux RootFS archive..."
+            try {
+                val displayName = queryDisplayName(uri)
+                val info = withContext(Dispatchers.IO) {
+                    val input = contentResolver.openInputStream(uri)
+                        ?: throw IOException("Android could not open the selected RootFS archive.")
+                    input.use {
+                        rootFsManager.importArchive(capsuleId, displayName, it)
+                    }
+                }
+                if (selectedCapsule?.id == capsuleId) refreshRootFsImages()
+                statusMessage = "Installed " + info.prettyName + " (" + info.architecture.label + ") as a file-backed RootFS."
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not import Linux RootFS."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun removeRootFs(info: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: return
+        lifecycleScope.launch {
+            try {
+                val removed = withContext(Dispatchers.IO) {
+                    rootFsManager.remove(capsule.id, info.architecture)
+                }
+                statusMessage = if (removed) {
+                    "Removed RootFS: " + info.prettyName
+                } else {
+                    "The RootFS could not be removed."
+                }
+                refreshRootFsImages()
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not remove RootFS."
+            }
+        }
     }
 
     private fun requestCapsuleImport() {
