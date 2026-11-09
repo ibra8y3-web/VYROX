@@ -37,6 +37,10 @@ import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
+import com.vyrox.engine.RuntimeCompatibilityPlanner
+import com.vyrox.engine.RuntimeEngineCatalog
+import com.vyrox.engine.VulkanProbeParser
+import com.vyrox.engine.X64RuntimePrerequisites
 import java.util.Locale
 
 private val VyroxColors = darkColorScheme(
@@ -104,6 +108,7 @@ fun VyroxApp(
 
 
                 HostReadinessCard(hostCapabilities)
+                RuntimeEngineStatusCard(hostCapabilities)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -309,6 +314,73 @@ fun VyroxApp(
     }
 }
 
+
+@Composable
+private fun RuntimeEngineStatusCard(profile: HostCapabilities) {
+    val vulkan = VulkanProbeParser.parse(profile.nativeVulkanInfo)
+    val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
+        X64RuntimePrerequisites(
+            hostAbis = profile.supported64BitAbis.toSet(),
+            linuxUserlandInstalled = false,
+            x86_64RootFsInstalled = false,
+            arm64WineInstalled = false,
+            box64Installed = false,
+            d3d11Requested = true,
+            dxvkInstalled = false,
+            vulkan = vulkan
+        )
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(
+                "Windows x64 readiness: " + if (readiness.canLaunch) "Ready" else "Not ready",
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.SemiBold
+            )
+            readiness.blockers.take(5).forEach { blocker ->
+                Text(
+                    "• $blocker",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Text(
+                "DXVK 2.7+ Vulkan preflight: " +
+                    if (vulkan.supportsDxvk27Requirements) "requirements detected" else "requirements not satisfied or not reported",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
+            RuntimeEngineCatalog.components.forEach { component ->
+                Text(
+                    component.name + " — " + component.integrationState.name
+                        .replace('_', ' ')
+                        .lowercase(),
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    component.role + " • " + component.license,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Text(
+                "Catalog entries are upstream candidates, not installed engines. No Windows process is launched by this screen.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
 
 @Composable
 private fun HostReadinessCard(profile: HostCapabilities) {
@@ -557,6 +629,11 @@ private fun InstallerRow(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(installer.displayName, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = installer.formatLabel + " • " + installer.architectureLabel,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall
+                )
                 Text(
                     text = formatBytes(installer.sizeBytes) + " • Stored privately • Not executed",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),

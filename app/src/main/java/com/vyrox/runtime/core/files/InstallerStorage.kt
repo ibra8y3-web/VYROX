@@ -9,7 +9,9 @@ import java.util.UUID
 data class ImportedInstaller(
     val displayName: String,
     val storedFileName: String,
-    val sizeBytes: Long
+    val sizeBytes: Long,
+    val formatLabel: String = "Unverified",
+    val architectureLabel: String = "Unknown architecture"
 )
 
 class InstallerStorage(context: Context) {
@@ -54,6 +56,8 @@ class InstallerStorage(context: Context) {
                 throw IOException("The selected installer file is empty.")
             }
 
+            val inspection = WindowsBinaryInspector.inspect(temporaryFile, displayName)
+
             if (!temporaryFile.renameTo(destinationFile)) {
                 throw IOException("Could not finalize the imported installer.")
             }
@@ -61,7 +65,9 @@ class InstallerStorage(context: Context) {
             return ImportedInstaller(
                 displayName = safeName,
                 storedFileName = destinationFile.name,
-                sizeBytes = totalBytes
+                sizeBytes = totalBytes,
+                formatLabel = inspection.format.label,
+                architectureLabel = inspection.architecture.label
             )
         } catch (exception: Exception) {
             temporaryFile.delete()
@@ -81,10 +87,16 @@ class InstallerStorage(context: Context) {
             .orEmpty()
             .filter { it.isFile && !it.name.startsWith(".") }
             .map { file ->
+                val displayName = file.name.substringAfter('_', file.name)
+                val inspection = runCatching {
+                    WindowsBinaryInspector.inspect(file, displayName)
+                }.getOrNull()
                 ImportedInstaller(
-                    displayName = file.name.substringAfter('_', file.name),
+                    displayName = displayName,
                     storedFileName = file.name,
-                    sizeBytes = file.length()
+                    sizeBytes = file.length(),
+                    formatLabel = inspection?.format?.label ?: "Unverified",
+                    architectureLabel = inspection?.architecture?.label ?: "Unknown architecture"
                 )
             }
             .sortedByDescending { it.storedFileName }
