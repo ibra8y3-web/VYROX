@@ -18,7 +18,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
 - File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
 - Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
-- File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
+- Initial JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
 - Unit tests for installer policy, filename sanitization, Capsule metadata, workspace layout, and safe drive lookup.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
@@ -67,6 +67,12 @@ app/src/main/
     core/capsule/
       CapsulePolicy.kt
       CapsuleStorage.kt
+    core/host/
+      HostCapabilities.kt
+      NativeHostBridge.kt
+    cpp/
+      CMakeLists.txt
+      vyrox_native.cpp
     ui/VyroxApp.kt
   res/values/
 app/src/test/java/com/vyrox/runtime/core/files/
@@ -74,6 +80,8 @@ app/src/test/java/com/vyrox/runtime/core/files/
 app/src/test/java/com/vyrox/runtime/core/capsule/
   CapsulePolicyTest.kt
   CapsuleStorageTest.kt
+app/src/test/java/com/vyrox/runtime/core/host/
+  HostCapabilitiesTest.kt
 build.gradle.kts
 settings.gradle.kts
 gradle.properties

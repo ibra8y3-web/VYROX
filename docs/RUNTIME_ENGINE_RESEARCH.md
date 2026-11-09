@@ -1,6 +1,6 @@
 # Windows runtime engine research and integration decision
 
-**Status: research only. No Windows runtime engine is integrated by this document.**
+**Status: research only. No Windows runtime engine is integrated. The JNI/C++ host-information bridge is implemented separately; it is not a compatibility engine.**
 
 ## Host target
 
@@ -57,8 +57,9 @@ checked at the pinned revision.
 
 1. **Host profile:** implemented in the Android app; unit tests verify the ARM64
    ABI decision.
-2. **Native build infrastructure:** add NDK/CMake only when a concrete native
-   target and supported ABIs are selected. Build and package the JNI library in CI.
+2. **Native build infrastructure:** implemented with a pinned NDK/CMake build and
+   a small JNI host-information library. This proves native compilation and loading,
+   not Windows runtime support.
 3. **Linux user-space and Wine:** select an Android-compatible build strategy,
    pin upstream revisions, document how glibc/Bionic boundaries are handled, and
    build an ARM64 Wine runtime.

@@ -262,6 +262,11 @@ private fun HostReadinessCard(profile: HostCapabilities) {
                 color = MaterialTheme.colorScheme.secondary
             )
             Text(
+                "Native bridge: " + (profile.nativeBuildInfo ?: "not available"),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
                 "Hardware detection only: Wine, CPU translation, and Windows execution are not installed.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 style = MaterialTheme.typography.bodySmall
