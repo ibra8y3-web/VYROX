@@ -20,6 +20,13 @@ class DiagnoseBuildFailureTests(unittest.TestCase):
         self.assertEqual(result["kotlin_locations"][0]["line"], 42)
         self.assertIn("Main.kt", result["root_error"])
 
+    def test_successful_kotlin_task_does_not_mask_a_test_failure(self):
+        result = classify_failure(
+            "> Task :app:compileDebugKotlin UP-TO-DATE\\n"
+            "There were failing tests. See the report at: build/reports/tests"
+        )
+        self.assertEqual(result["category"], "Unit tests")
+
     def test_classifies_dependency_resolution_failure(self):
         result = classify_failure(
             "Could not resolve com.example:missing:1.0.\nBUILD FAILED"
