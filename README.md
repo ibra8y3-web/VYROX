@@ -9,6 +9,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 ## Implemented in source
 
 - Native Android application shell built with Kotlin and Jetpack Compose.
+- Adaptive Android launcher icon for supported Android launchers.
 - System document picker for selecting installer files.
 - Private app-internal storage for imported installers.
 - File-extension validation and a 2 GiB import limit.
@@ -17,7 +18,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Unit tests for installer extension validation and filename sanitization.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
-These features are implemented in source. The first CI run is the verification gate; they are not described as build-verified until that run succeeds.
+These features are implemented in source. GitHub Actions is the verification gate; no feature is described as build-verified until a passing run confirms it.
 
 ## Not implemented
 
@@ -44,7 +45,7 @@ Run from the repository root after installing the Android SDK platform and Gradl
 gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact.
+GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact. Dependabot checks Gradle and GitHub Actions dependencies weekly.
 
 ## Structure
 
