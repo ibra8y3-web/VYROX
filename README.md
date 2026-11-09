@@ -16,7 +16,8 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Temporary-file copy followed by rename, so incomplete copies are not shown as imported.
 - Local installer list and remove action.
 - Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
-- Unit tests for installer extension validation and filename sanitization.
+- File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
+- Unit tests for installer policy, filename sanitization, Capsule metadata, workspace layout, and safe drive lookup.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
 These features are implemented in source. GitHub Actions is the verification gate; no feature is described as build-verified until a passing run confirms it.
@@ -24,6 +25,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 ## Not implemented
 
 - VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
+- Mountable Windows drive mapping and a Capsule file browser.
 - Wine or another Windows API compatibility layer.
 - x86/x64-to-ARM64 translation.
 - Vulkan, DXVK, or DirectX translation.
@@ -59,10 +61,16 @@ app/src/main/
     core/files/
       InstallerPolicy.kt
       InstallerStorage.kt
+    core/capsule/
+      CapsulePolicy.kt
+      CapsuleStorage.kt
     ui/VyroxApp.kt
   res/values/
 app/src/test/java/com/vyrox/runtime/core/files/
   InstallerPolicyTest.kt
+app/src/test/java/com/vyrox/runtime/core/capsule/
+  CapsulePolicyTest.kt
+  CapsuleStorageTest.kt
 build.gradle.kts
 settings.gradle.kts
 gradle.properties
@@ -79,7 +87,7 @@ LICENSE
 ## Roadmap
 
 1. **Foundation:** Android shell, safe installer import, tests, and CI.
-2. **Capsule workspaces:** create/list/remove private file-based workspaces and persist per-Capsule metadata; this does not provide process or VM isolation.
+2. **Capsule workspaces:** create/list/remove private file-based workspaces, persist metadata, and prepare C:/D: directory layouts; this does not provide process or VM isolation.
 3. **Runtime research and integration:** evaluate Wine and CPU translation options, licenses, ABI requirements, and device compatibility.
 4. **Graphics and input:** validate Vulkan/GPU paths on supported devices.
 5. **Execution milestone:** launch a small, explicitly supported Windows test application on physical ARM64 hardware.

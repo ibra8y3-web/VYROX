@@ -52,6 +52,7 @@ class CapsuleStorage(private val capsuleRoot: File) {
         val metadataFile = File(directory, "capsule.properties")
 
         try {
+            createInitialDriveLayout(directory)
             temporaryFile.outputStream().buffered().use { output ->
                 metadata.store(output, "VYROX Capsule metadata")
             }
@@ -67,12 +68,46 @@ class CapsuleStorage(private val capsuleRoot: File) {
         }
     }
 
+    /**
+     * Returns a file-backed C: or D: drive root for the requested Capsule.
+     * The returned directory is private to the app; it is not an OS-mounted drive.
+     */
+    fun getDriveRoot(id: String, driveLetter: Char): File? {
+        if (!isValidId(id) || !capsuleRoot.isDirectory) return null
+
+        val canonicalRoot = capsuleRoot.canonicalFile
+        val capsuleDirectory = File(capsuleRoot, id).canonicalFile
+        if (capsuleDirectory.parentFile != canonicalRoot || !capsuleDirectory.isDirectory) {
+            return null
+        }
+
+        val driveDirectoryName = when (driveLetter.uppercaseChar()) {
+            'C' -> "drive_c"
+            'D' -> "drive_d"
+            else -> return null
+        }
+        val driveDirectory = File(capsuleDirectory, driveDirectoryName).canonicalFile
+        if (driveDirectory.parentFile != capsuleDirectory || !driveDirectory.isDirectory) {
+            return null
+        }
+        return driveDirectory
+    }
+
     fun deleteCapsule(id: String): Boolean {
         if (!isValidId(id) || !capsuleRoot.isDirectory) return false
         val canonicalRoot = capsuleRoot.canonicalFile
         val candidate = File(capsuleRoot, id).canonicalFile
         if (candidate.parentFile != canonicalRoot || !candidate.isDirectory) return false
         return candidate.deleteRecursively()
+    }
+
+    private fun createInitialDriveLayout(capsuleDirectory: File) {
+        INITIAL_DIRECTORY_PATHS.forEach { relativePath ->
+            val target = File(capsuleDirectory, relativePath)
+            if (!target.mkdirs() && !target.isDirectory) {
+                throw IOException("Could not create Capsule directory: $relativePath")
+            }
+        }
     }
 
     private fun readCapsule(directory: File, canonicalRoot: File): CapsuleInfo? {
@@ -101,6 +136,19 @@ class CapsuleStorage(private val capsuleRoot: File) {
     private fun isValidId(value: String): Boolean = CAPSULE_ID_PATTERN.matches(value)
 
     private companion object {
+        val INITIAL_DIRECTORY_PATHS = listOf(
+            "drive_c/Windows",
+            "drive_c/Program Files",
+            "drive_c/Program Files (x86)",
+            "drive_c/Users/Default",
+            "drive_c/Users/Public",
+            "drive_c/Temp",
+            "drive_d/Downloads",
+            "drive_d/Documents",
+            "drive_d/Games",
+            "drive_d/Data"
+        )
+
         val CAPSULE_ID_PATTERN = Regex(
             "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
         )

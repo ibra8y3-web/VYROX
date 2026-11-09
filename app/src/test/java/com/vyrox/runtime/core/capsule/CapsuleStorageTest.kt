@@ -2,6 +2,7 @@ package com.vyrox.runtime.core.capsule
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -22,6 +23,13 @@ class CapsuleStorageTest {
         assertEquals("My Workspace", created.name)
         assertEquals(listOf(created), storage.listCapsules())
         assertTrue(File(root, created.id).isDirectory)
+        val cDrive = requireNotNull(storage.getDriveRoot(created.id, 'C'))
+        val dDrive = requireNotNull(storage.getDriveRoot(created.id, 'D'))
+        assertTrue(File(cDrive, "Windows").isDirectory)
+        assertTrue(File(cDrive, "Program Files").isDirectory)
+        assertTrue(File(cDrive, "Users/Default").isDirectory)
+        assertTrue(File(dDrive, "Downloads").isDirectory)
+        assertTrue(File(dDrive, "Games").isDirectory)
     }
 
     @Test
@@ -34,6 +42,15 @@ class CapsuleStorageTest {
         assertFalse(storage.deleteCapsule(first.id))
         assertEquals(listOf(second), storage.listCapsules())
         assertFalse(storage.deleteCapsule("../Second"))
+    }
+
+    @Test
+    fun rejectsUnsupportedDriveLettersAndInvalidCapsuleIds() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Workspace")
+
+        assertNull(storage.getDriveRoot(capsule.id, 'E'))
+        assertNull(storage.getDriveRoot("../outside", 'C'))
     }
 
     @Test

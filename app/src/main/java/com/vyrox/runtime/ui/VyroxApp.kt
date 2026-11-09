@@ -255,7 +255,7 @@ private fun CapsuleRow(
             ) {
                 Text(capsule.name, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Private workspace • metadata stored locally",
+                    "C: system folders • D: data folders • private app storage",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                     style = MaterialTheme.typography.bodySmall
                 )
