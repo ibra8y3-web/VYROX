@@ -24,7 +24,8 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, and Windows x64 readiness planner.
 - PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
 - MSI Compound File Binary signature check before storing an MSI database.
-- Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, and deletion.
+- SHA-256 verified runtime package installer with ABI checks, ZIP traversal protection, archive limits, and private atomic installation.
+- Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, file operations, engine planning, and package installation.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 - Deterministic build-failure diagnostic report uploaded as a separate artifact when CI fails.
 
@@ -41,6 +42,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 - DXVK, VKD3D-Proton, DirectX execution, or validation of required Vulkan extensions/features.
 - Vulkan, DXVK, or DirectX translation.
 - Windows process execution or application launch.
+- Downloaded or bundled Wine/Box64/FEX/DXVK runtime packages; the package manager exists but no compatible packages are published or installed.
 - A hardened VM or security sandbox.
 - Malware scanning of imported installers.
 
@@ -82,6 +84,8 @@ app/src/main/
     core/host/
       HostCapabilities.kt
       NativeHostBridge.kt
+    core/engine/
+      RuntimePackageManager.kt
     cpp/
       CMakeLists.txt
       vyrox_native.cpp
@@ -94,6 +98,8 @@ app/src/test/java/com/vyrox/runtime/core/capsule/
   CapsuleStorageTest.kt
 app/src/test/java/com/vyrox/runtime/core/host/
   HostCapabilitiesTest.kt
+app/src/test/java/com/vyrox/runtime/core/engine/
+  RuntimePackageManagerTest.kt
 runtime-engine/
   src/main/kotlin/com/vyrox/engine/RuntimeCatalog.kt
   src/test/kotlin/com/vyrox/engine/RuntimeCatalogTest.kt
