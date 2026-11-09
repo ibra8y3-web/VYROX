@@ -402,7 +402,7 @@ private fun CapsuleExplorerCard(
             val drivePath = if (currentPath.isBlank()) {
                 "${selectedDrive}:\\"
             } else {
-                "${selectedDrive}:\\${currentPath.replace('/', '\\\\')}"
+                "${selectedDrive}:\\${currentPath.replace('/', '\\')}"
             }
             Text(drivePath, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             Text(
