@@ -4,19 +4,22 @@
 
 VYROX is hosted by Android. It is not a replacement operating system. The project aims to provide managed workspaces ("Capsules") and, in later milestones, a tested compatibility runtime for selected Windows applications.
 
-> **Current status: foundation milestone.** This initial implementation provides an Android app shell and a private installer-import workflow for `.exe` and `.msi` files. It does not execute Windows programs. Wine, CPU translation, graphics translation, and Windows API compatibility are not integrated.
+> **Current status: foundation milestone.** The current Android app can import `.exe` and `.msi` installers into private app storage, list them, and remove them. It does not execute Windows programs. Wine, CPU translation, graphics translation, and Windows API compatibility are not integrated.
 
-## Implemented in this milestone
+## Implemented in source
 
 - Native Android application shell built with Kotlin and Jetpack Compose.
-- System file picker for selecting EXE/MSI installers.
-- Private app-internal storage for imported installer files.
-- File-extension and file-size validation.
-- Temporary-file copy followed by atomic rename to avoid exposing partial imports.
-- Unit tests for installer validation and storage naming rules.
-- GitHub Actions workflow for Android unit tests, lint, and debug APK assembly.
+- System document picker for selecting installer files.
+- Private app-internal storage for imported installers.
+- File-extension validation and a 2 GiB import limit.
+- Temporary-file copy followed by rename, so incomplete copies are not shown as imported.
+- Local installer list and remove action.
+- Unit tests for installer extension validation and filename sanitization.
+- GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
-## Not implemented yet
+These features are implemented in source. The first CI run is the verification gate; they are not described as build-verified until that run succeeds.
+
+## Not implemented
 
 - Capsule lifecycle and independent runtime environments.
 - Wine or another Windows API compatibility layer.
@@ -24,43 +27,67 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Vulkan, DXVK, or DirectX translation.
 - Windows process execution or application launch.
 - A hardened VM or security sandbox.
+- Malware scanning of imported installers.
 
-## Build
+## Build configuration
 
-Requirements: JDK 17, Android SDK Platform 35, and Gradle 8.13.
+- JDK 17
+- Android SDK Platform 36 (target SDK 35)
+- Android Gradle Plugin 8.13.2
+- Gradle 8.13
+- Kotlin 2.2.21
+- Jetpack Compose BOM 2025.08.00
+
+Run from the repository root after installing the Android SDK platform and Gradle:
 
 ```bash
 gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-The repository workflow installs the JDK and Gradle and runs these checks on pushes and pull requests.
+GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact.
 
 ## Structure
 
 ```text
-app/src/main/java/com/vyrox/runtime/
-  MainActivity.kt
-  core/files/InstallerImport.kt
-  ui/VyroxApp.kt
-app/src/test/java/com/vyrox/runtime/core/files/
-  InstallerImportTest.kt
 .github/workflows/android.yml
+app/src/main/
+  AndroidManifest.xml
+  java/com/vyrox/runtime/
+    MainActivity.kt
+    core/files/
+      InstallerPolicy.kt
+      InstallerStorage.kt
+    ui/VyroxApp.kt
+  res/values/
+app/src/test/java/com/vyrox/runtime/core/files/
+  InstallerPolicyTest.kt
+build.gradle.kts
+settings.gradle.kts
+gradle.properties
+LICENSE
 ```
 
 ## Security notes
 
-Imported files are stored in the application's private internal directory and are not executed. The import process is not malware scanning. Only import files from sources you trust. The initial storage boundary is Android app-private storage; it must not be described as a virtual machine or a hardened isolation boundary.
+- Imported files are stored in the application's private internal directory and are not executed.
+- The import pipeline accepts only `.exe` and `.msi` filenames and enforces a maximum size.
+- File import is not malware scanning. Do not import or execute untrusted files.
+- The initial storage boundary is app-private storage, not a virtual machine or a hardened security boundary.
 
 ## Roadmap
 
-1. Foundation app, installer import, tests, and CI.
-2. Capsule creation, listing, metadata, and deletion.
-3. Evaluate and integrate a licensed Windows compatibility layer and CPU translation backend.
-4. Validate graphics and input paths on real supported ARM64 devices.
-5. Demonstrate execution of a specifically supported Windows test application on physical hardware.
-6. Security review, resource limits, diagnostics, and reproducible builds.
+1. **Foundation:** Android shell, safe installer import, tests, and CI.
+2. **Capsule management:** create/list/remove workspaces and store per-Capsule metadata.
+3. **Runtime research and integration:** evaluate Wine and CPU translation options, licenses, ABI requirements, and device compatibility.
+4. **Graphics and input:** validate Vulkan/GPU paths on supported devices.
+5. **Execution milestone:** launch a small, explicitly supported Windows test application on physical ARM64 hardware.
+6. **Hardening:** security review, resource limits, diagnostics, and reproducible builds.
 
 Every runtime feature must have documented device coverage and test evidence before being marked complete.
+
+## Contributing
+
+Please open an issue before proposing a runtime engine or binary dependency. Every integration must document its upstream source, license, supported ABI, build procedure, and test evidence.
 
 ## License
 
