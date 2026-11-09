@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "VYROX"
-include(":app")
+include(":app", ":runtime-engine")
