@@ -6,8 +6,8 @@
 
 VYROX is an Android application. The first runtime host target is 64-bit ARM Android
 (`arm64-v8a`). The app reads Android's supported ABI list, logical CPU count, and total memory.
-Its Vulkan probe is being extended to report actual device extension names,
-push-constant size, and descriptor-indexing support. These are preflight checks
+Its Vulkan probe reports actual device extension names, push-constant size,
+descriptor indexing, scalar block layout, and integer feature support. These are preflight checks
 only; they do not prove DXVK or Windows applications will run on a particular
 Android device.
 
@@ -35,13 +35,15 @@ Android device.
 
 ## Graphics path is conditional
 
-DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. DXVK 2.7+ documents
-a Vulkan 1.3 baseline and required extensions including
+DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. The current DXVK 3.x
+driver guide requires Vulkan 1.4 and these device extensions:
 `VK_EXT_depth_clip_enable`, `VK_KHR_maintenance5`,
-`VK_KHR_maintenance6`, `VK_EXT_robustness2`, and
-`VK_EXT_transform_feedback`, plus descriptor indexing and at least 256 bytes of
-push constants. Its driver documentation does not provide first-party support for
-Android/mobile GPU drivers. VYROX must probe and then physically test each driver.
+`VK_KHR_maintenance6`, `VK_KHR_load_store_op_none`,
+`VK_EXT_robustness2`, and `VK_EXT_transform_feedback`. Drivers must also
+expose at least 256 bytes of push constants, descriptor indexing, 8-bit, 16-bit,
+and 64-bit integer types, and `scalarBlockLayout`. Upstream does not provide
+first-party support for Android/mobile GPU drivers. VYROX must probe and then
+physically test each driver.
 
 Source: https://github.com/doitsujin/dxvk
 

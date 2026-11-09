@@ -57,7 +57,7 @@ object RuntimeEngineCatalog {
             upstreamUrl = "https://github.com/doitsujin/dxvk",
             license = "zlib",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Requires Vulkan 1.3 and specific extensions/features; Android mobile drivers are not first-party supported."
+            notes = "DXVK 3.x requires Vulkan 1.4 plus specific extensions and features; Android mobile drivers are not first-party supported."
         ),
         RuntimeEngineDescriptor(
             id = "vkd3d-proton",
@@ -91,23 +91,32 @@ data class VulkanProbe(
     val driverVersion: String?,
     val extensions: Set<String>,
     val maxPushConstantsBytes: Int,
-    val descriptorIndexing: Boolean
+    val descriptorIndexing: Boolean,
+    val scalarBlockLayout: Boolean,
+    val shaderInt8: Boolean,
+    val shaderInt16: Boolean,
+    val shaderInt64: Boolean
 ) {
-    val hasVulkan13: Boolean
-        get() = apiMajor > 1 || (apiMajor == 1 && apiMinor >= 3)
+    val hasVulkan14: Boolean
+        get() = apiMajor > 1 || (apiMajor == 1 && apiMinor >= 4)
 
-    val supportsDxvk27Requirements: Boolean
+    val supportsDxvk3Requirements: Boolean
         get() = deviceAvailable &&
-            hasVulkan13 &&
-            DXVK_27_REQUIRED_EXTENSIONS.all { it in extensions } &&
+            hasVulkan14 &&
+            DXVK_3X_REQUIRED_EXTENSIONS.all { it in extensions } &&
             maxPushConstantsBytes >= 256 &&
-            descriptorIndexing
+            descriptorIndexing &&
+            scalarBlockLayout &&
+            shaderInt8 &&
+            shaderInt16 &&
+            shaderInt64
 
     companion object {
-        val DXVK_27_REQUIRED_EXTENSIONS = setOf(
+        val DXVK_3X_REQUIRED_EXTENSIONS = setOf(
             "VK_EXT_depth_clip_enable",
             "VK_KHR_maintenance5",
             "VK_KHR_maintenance6",
+            "VK_KHR_load_store_op_none",
             "VK_EXT_robustness2",
             "VK_EXT_transform_feedback"
         )
@@ -140,7 +149,11 @@ object VulkanProbeParser {
             driverVersion = values["driver_version"]?.takeIf { it.isNotBlank() },
             extensions = extensions,
             maxPushConstantsBytes = values["max_push_constants"]?.toIntOrNull() ?: 0,
-            descriptorIndexing = values["descriptor_indexing"].toBoolean()
+            descriptorIndexing = values["descriptor_indexing"].toBoolean(),
+            scalarBlockLayout = values["scalar_block_layout"].toBoolean(),
+            shaderInt8 = values["shader_int8"].toBoolean(),
+            shaderInt16 = values["shader_int16"].toBoolean(),
+            shaderInt64 = values["shader_int64"].toBoolean()
         )
     }
 }
@@ -153,11 +166,14 @@ data class X64RuntimePrerequisites(
     val box64Installed: Boolean,
     val d3d11Requested: Boolean,
     val dxvkInstalled: Boolean,
-    val vulkan: VulkanProbe
+    val vulkan: VulkanProbe,
+    val windowsPeLoaderInstalled: Boolean = false,
+    val capsuleDriveMappingInstalled: Boolean = false,
+    val physicalDeviceExecutionVerified: Boolean = false
 )
 
 data class RuntimeReadiness(
-    val canLaunch: Boolean,
+    val preflightPassed: Boolean,
     val blockers: List<String>
 )
 
@@ -182,15 +198,24 @@ object RuntimeCompatibilityPlanner {
             if (!prerequisites.box64Installed) {
                 add("Box64 has not been built and integrated for the selected userland.")
             }
+            if (!prerequisites.windowsPeLoaderInstalled) {
+                add("The VYROX Windows PE loader/session bridge is not integrated.")
+            }
+            if (!prerequisites.capsuleDriveMappingInstalled) {
+                add("Capsule C:/D: paths are not mapped into a Windows runtime.")
+            }
+            if (!prerequisites.physicalDeviceExecutionVerified) {
+                add("No Windows executable has passed a physical-device execution test.")
+            }
             if (prerequisites.d3d11Requested) {
                 if (!prerequisites.dxvkInstalled) {
                     add("DXVK has not been integrated.")
                 }
-                if (!prerequisites.vulkan.supportsDxvk27Requirements) {
-                    add("The Vulkan device has not passed the DXVK 2.7+ requirements check.")
+                if (!prerequisites.vulkan.supportsDxvk3Requirements) {
+                    add("The Vulkan device has not passed the DXVK 3.x Vulkan 1.4 feature requirements.")
                 }
             }
         }
-        return RuntimeReadiness(canLaunch = blockers.isEmpty(), blockers = blockers)
+        return RuntimeReadiness(preflightPassed = blockers.isEmpty(), blockers = blockers)
     }
 }

@@ -62,7 +62,7 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
     application_info.applicationVersion = 1;
     application_info.pEngineName = "VYROX";
     application_info.engineVersion = 1;
-    application_info.apiVersion = std::min(loader_version, VK_API_VERSION_1_3);
+    application_info.apiVersion = loader_version;
 
     VkInstanceCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -137,6 +137,7 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
         "VK_EXT_depth_clip_enable",
         "VK_KHR_maintenance5",
         "VK_KHR_maintenance6",
+        "VK_KHR_load_store_op_none",
         "VK_EXT_robustness2",
         "VK_EXT_transform_feedback"
     };
@@ -149,6 +150,10 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
     }
 
     bool descriptor_indexing = false;
+    bool scalar_block_layout = false;
+    bool shader_int8 = false;
+    bool shader_int16 = false;
+    bool shader_int64 = false;
 #if defined(VK_VERSION_1_1) && defined(VK_VERSION_1_2)
     if (properties.apiVersion >= VK_API_VERSION_1_2) {
         auto get_features2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
@@ -163,6 +168,10 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
             features2.pNext = &vulkan12_features;
             get_features2(physical_device, &features2);
             descriptor_indexing = vulkan12_features.descriptorIndexing == VK_TRUE;
+            scalar_block_layout = vulkan12_features.scalarBlockLayout == VK_TRUE;
+            shader_int8 = vulkan12_features.shaderInt8 == VK_TRUE;
+            shader_int16 = features2.features.shaderInt16 == VK_TRUE;
+            shader_int64 = features2.features.shaderInt64 == VK_TRUE;
         }
     }
 #endif
@@ -181,15 +190,19 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
         missing_output << missing_extensions[index];
     }
 
-    const bool vulkan_13 =
+    const bool vulkan_14 =
         VK_VERSION_MAJOR(properties.apiVersion) > 1 ||
         (VK_VERSION_MAJOR(properties.apiVersion) == 1 &&
-         VK_VERSION_MINOR(properties.apiVersion) >= 3);
+         VK_VERSION_MINOR(properties.apiVersion) >= 4);
     const bool dxvk_requirements_detected =
-        vulkan_13 &&
+        vulkan_14 &&
         missing_extensions.empty() &&
         properties.limits.maxPushConstantsSize >= 256 &&
-        descriptor_indexing;
+        descriptor_indexing &&
+        scalar_block_layout &&
+        shader_int8 &&
+        shader_int16 &&
+        shader_int64;
 
     std::ostringstream output;
     output << "vulkan=available"
@@ -201,9 +214,13 @@ Java_com_vyrox_runtime_core_host_NativeHostBridge_nativeVulkanInfo(
            << ";physical_devices=" << physical_device_count
            << ";max_push_constants=" << properties.limits.maxPushConstantsSize
            << ";descriptor_indexing=" << (descriptor_indexing ? "true" : "false")
+           << ";scalar_block_layout=" << (scalar_block_layout ? "true" : "false")
+           << ";shader_int8=" << (shader_int8 ? "true" : "false")
+           << ";shader_int16=" << (shader_int16 ? "true" : "false")
+           << ";shader_int64=" << (shader_int64 ? "true" : "false")
            << ";extensions=" << extension_output.str()
            << ";dxvk_missing=" << missing_output.str()
-           << ";dxvk27_compatible=" << (dxvk_requirements_detected ? "true" : "false");
+           << ";dxvk3_compatible=" << (dxvk_requirements_detected ? "true" : "false");
 
     vkDestroyInstance(instance, nullptr);
     const std::string value = output.str();

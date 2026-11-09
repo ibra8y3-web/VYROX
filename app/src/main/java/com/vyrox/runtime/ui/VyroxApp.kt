@@ -397,7 +397,7 @@ private fun RuntimeEngineStatusCard(profile: HostCapabilities) {
         ) {
             Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
-                "Windows x64 readiness: " + if (readiness.canLaunch) "Ready" else "Not ready",
+                "Windows x64 modeled preflight: " + if (readiness.preflightPassed) "Ready" else "Not ready",
                 color = MaterialTheme.colorScheme.secondary,
                 fontWeight = FontWeight.SemiBold
             )
@@ -409,8 +409,8 @@ private fun RuntimeEngineStatusCard(profile: HostCapabilities) {
                 )
             }
             Text(
-                "DXVK 2.7+ Vulkan preflight: " +
-                    if (vulkan.supportsDxvk27Requirements) "requirements detected" else "requirements not satisfied or not reported",
+                "DXVK 3.x Vulkan preflight: " +
+                    if (vulkan.supportsDxvk3Requirements) "requirements detected" else "requirements not satisfied or not reported",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.bodySmall
             )
