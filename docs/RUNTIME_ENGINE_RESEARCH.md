@@ -5,9 +5,11 @@
 ## Host target
 
 VYROX is an Android application. The first runtime host target is 64-bit ARM Android
-(`arm64-v8a`). The app now reads Android's supported ABI list, logical CPU count,
-and total memory. That probe is only a hardware profile; it does not test Vulkan
-features or prove that a Windows application will run.
+(`arm64-v8a`). The app reads Android's supported ABI list, logical CPU count, and total memory.
+Its Vulkan probe is being extended to report actual device extension names,
+push-constant size, and descriptor-indexing support. These are preflight checks
+only; they do not prove DXVK or Windows applications will run on a particular
+Android device.
 
 ## Separate the Windows API layer from CPU translation
 
@@ -20,9 +22,9 @@ features or prove that a Windows application will run.
   files. A VYROX route using Box64 therefore needs a compatible Linux user-space
   environment and Wine, not just an EXE file picker.
   Source: https://github.com/ptitSeb/box64
-- **FEX** also runs x86 and x86-64 applications on ARM64 Linux, and its upstream
-  documentation requires an x86-64 RootFS. It is an alternative to evaluate, not
-  an Android drop-in library.
+- **FEX** runs x86 and x86-64 applications on ARM64 Linux and requires an x86-64
+  RootFS. Its upstream FAQ says Android is not a supported FEX target; FEXCore
+  can be built as a library for Android, but that alone is not a usable emulator.
   Source: https://github.com/FEX-Emu/FEX
 - **Winlator** demonstrates an existing Android combination of Wine with Box86/Box64
   and graphics components. It is useful as a technical reference, but VYROX will
@@ -33,11 +35,13 @@ features or prove that a Windows application will run.
 
 ## Graphics path is conditional
 
-DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. It is not a universal
-Android graphics backend. Current DXVK 3.x documentation lists Vulkan 1.4 and
-specific driver features, and explicitly says first-party Android/mobile GPU driver
-support is not provided. VYROX must inspect the actual device's Vulkan capabilities
-and driver before enabling a DXVK path.
+DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. DXVK 2.7+ documents
+a Vulkan 1.3 baseline and required extensions including
+`VK_EXT_depth_clip_enable`, `VK_KHR_maintenance5`,
+`VK_KHR_maintenance6`, `VK_EXT_robustness2`, and
+`VK_EXT_transform_feedback`, plus descriptor indexing and at least 256 bytes of
+push constants. Its driver documentation does not provide first-party support for
+Android/mobile GPU drivers. VYROX must probe and then physically test each driver.
 
 Source: https://github.com/doitsujin/dxvk
 
@@ -58,9 +62,11 @@ checked at the pinned revision.
 1. **Host profile:** implemented in the Android app; unit tests verify the ARM64
    ABI decision.
 2. **Native build infrastructure:** implemented with a pinned NDK/CMake build and
-   a JNI host-information library. A Vulkan probe also reports the first available
-   physical device and API/driver versions. This does not validate DXVK-required
-   extensions or Windows graphics execution.
+   a JNI host-information library. The Vulkan probe reports the physical device
+   and is being extended to expose the required DXVK extension and feature values.
+3. **Runtime planning:** implemented in a separate Kotlin/JVM module. It records
+   upstream component roles and licenses and reports missing Windows x64 runtime
+   prerequisites; it does not start a process or install third-party binaries.
 3. **Linux user-space and Wine:** select an Android-compatible build strategy,
    pin upstream revisions, document how glibc/Bionic boundaries are handled, and
    build an ARM64 Wine runtime.

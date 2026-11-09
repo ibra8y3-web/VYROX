@@ -47,7 +47,7 @@ jobs:
       - name: Run unit tests, lint, and assemble debug APK
         run: |
           set -o pipefail
-          gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee "$RUNNER_TEMP/vyrox-gradle-build.log"
+          gradle --no-daemon :runtime-engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee "$RUNNER_TEMP/vyrox-gradle-build.log"
 
       - name: Generate build failure diagnostic
         if: failure()
