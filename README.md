@@ -16,10 +16,11 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Temporary-file copy followed by rename, so incomplete copies are not shown as imported.
 - Local installer list and remove action.
 - Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
+- Capsule file explorer with C:/D: navigation, folder creation, file import, and safe delete actions.
 - File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
 - Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
 - Initial JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
-- Unit tests for installer policy, filename sanitization, Capsule metadata, workspace layout, and safe drive lookup.
+- Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, and deletion.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
 These features are implemented in source. GitHub Actions is the verification gate; no feature is described as build-verified until a passing run confirms it.
@@ -27,7 +28,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 ## Not implemented
 
 - VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
-- Mountable Windows drive mapping and a Capsule file browser.
+- Mountable Windows drive mapping; the current file explorer operates on app-private file-backed directories only.
 - Wine or another Windows API compatibility layer.
 - x86/x64-to-ARM64 translation.
 - A Windows compatibility runtime, native CPU translator, or Windows process loader.

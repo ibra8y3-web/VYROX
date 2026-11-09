@@ -2,6 +2,8 @@ package com.vyrox.runtime.core.capsule
 
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.util.Locale
 import java.util.Properties
 import java.util.UUID
 
@@ -9,6 +11,13 @@ data class CapsuleInfo(
     val id: String,
     val name: String,
     val createdAtEpochMillis: Long
+)
+
+data class CapsuleFileEntry(
+    val name: String,
+    val relativePath: String,
+    val isDirectory: Boolean,
+    val sizeBytes: Long
 )
 
 /**
@@ -93,6 +102,142 @@ class CapsuleStorage(private val capsuleRoot: File) {
         return driveDirectory
     }
 
+    fun listDirectory(
+        capsuleId: String,
+        driveLetter: Char,
+        relativePath: String = ""
+    ): List<CapsuleFileEntry> {
+        val driveRoot = getDriveRoot(capsuleId, driveLetter)
+            ?: throw IllegalArgumentException("Capsule drive not found.")
+        val directory = resolveDrivePath(driveRoot, relativePath)
+            ?: throw IllegalArgumentException("The requested path is outside this Capsule drive.")
+        if (!directory.isDirectory) {
+            throw IllegalArgumentException("The requested path is not a directory.")
+        }
+
+        val children = directory.listFiles()
+            ?: throw IOException("Could not read the Capsule directory.")
+
+        return children
+            .filter { !it.name.startsWith(".") }
+            .sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase(Locale.ROOT) }))
+            .map { child ->
+                CapsuleFileEntry(
+                    name = child.name,
+                    relativePath = joinRelativePath(relativePath, child.name),
+                    isDirectory = child.isDirectory,
+                    sizeBytes = if (child.isFile) child.length() else 0L
+                )
+            }
+    }
+
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun createDirectory(
+        capsuleId: String,
+        driveLetter: Char,
+        parentRelativePath: String,
+        rawName: String
+    ): CapsuleFileEntry {
+        val name = CapsuleFilePolicy.requireValidEntryName(rawName)
+        val driveRoot = getDriveRoot(capsuleId, driveLetter)
+            ?: throw IllegalArgumentException("Capsule drive not found.")
+        val parent = resolveDrivePath(driveRoot, parentRelativePath)
+            ?: throw IllegalArgumentException("The parent path is outside this Capsule drive.")
+        if (!parent.isDirectory) {
+            throw IllegalArgumentException("The selected parent is not a directory.")
+        }
+
+        val destination = File(parent, name).canonicalFile
+        if (destination.parentFile != parent.canonicalFile || !isWithinRoot(driveRoot, destination)) {
+            throw IllegalArgumentException("The folder name is not valid for this location.")
+        }
+        if (destination.exists()) {
+            throw IOException("An item with this name already exists.")
+        }
+        if (!destination.mkdir()) {
+            throw IOException("Could not create the Capsule folder.")
+        }
+
+        return CapsuleFileEntry(
+            name = name,
+            relativePath = joinRelativePath(parentRelativePath, name),
+            isDirectory = true,
+            sizeBytes = 0L
+        )
+    }
+
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun importFile(
+        capsuleId: String,
+        driveLetter: Char,
+        parentRelativePath: String,
+        displayName: String,
+        input: InputStream
+    ): CapsuleFileEntry {
+        val name = CapsuleFilePolicy.requireValidEntryName(displayName)
+        val driveRoot = getDriveRoot(capsuleId, driveLetter)
+            ?: throw IllegalArgumentException("Capsule drive not found.")
+        val parent = resolveDrivePath(driveRoot, parentRelativePath)
+            ?: throw IllegalArgumentException("The destination path is outside this Capsule drive.")
+        if (!parent.isDirectory) {
+            throw IllegalArgumentException("The selected destination is not a directory.")
+        }
+
+        val destination = File(parent, name).canonicalFile
+        if (destination.parentFile != parent.canonicalFile || !isWithinRoot(driveRoot, destination)) {
+            throw IllegalArgumentException("The file name is not valid for this location.")
+        }
+        if (destination.exists()) {
+            throw IOException("An item with this name already exists.")
+        }
+
+        val temporaryFile = File(parent, ".vyrox-import-" + UUID.randomUUID() + ".part")
+        var totalBytes = 0L
+        try {
+            temporaryFile.outputStream().buffered().use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val bytesRead = input.read(buffer)
+                    if (bytesRead < 0) break
+                    if (bytesRead == 0) continue
+
+                    totalBytes += bytesRead
+                    if (totalBytes > MAX_CAPSULE_FILE_BYTES) {
+                        throw IOException("File exceeds the 2 GiB Capsule import limit.")
+                    }
+                    output.write(buffer, 0, bytesRead)
+                }
+            }
+
+            if (totalBytes == 0L) {
+                throw IOException("The selected file is empty.")
+            }
+            if (!temporaryFile.renameTo(destination)) {
+                throw IOException("Could not finalize the imported Capsule file.")
+            }
+
+            return CapsuleFileEntry(
+                name = name,
+                relativePath = joinRelativePath(parentRelativePath, name),
+                isDirectory = false,
+                sizeBytes = totalBytes
+            )
+        } catch (exception: Exception) {
+            temporaryFile.delete()
+            throw exception
+        } finally {
+            if (temporaryFile.exists()) temporaryFile.delete()
+        }
+    }
+
+    fun deleteEntry(capsuleId: String, driveLetter: Char, relativePath: String): Boolean {
+        if (relativePath.isBlank()) return false
+        val driveRoot = getDriveRoot(capsuleId, driveLetter) ?: return false
+        val target = resolveDrivePath(driveRoot, relativePath) ?: return false
+        if (target == driveRoot || !target.exists()) return false
+        return if (target.isDirectory) target.deleteRecursively() else target.delete()
+    }
+
     fun deleteCapsule(id: String): Boolean {
         if (!isValidId(id) || !capsuleRoot.isDirectory) return false
         val canonicalRoot = capsuleRoot.canonicalFile
@@ -109,6 +254,28 @@ class CapsuleStorage(private val capsuleRoot: File) {
             }
         }
     }
+
+    private fun resolveDrivePath(driveRoot: File, relativePath: String): File? {
+        if (relativePath.isEmpty()) return driveRoot.canonicalFile
+        val normalized = relativePath.replace('\\', '/')
+        if (normalized.startsWith("/") || normalized.endsWith("/") || normalized.contains(':')) {
+            return null
+        }
+        val segments = normalized.split('/')
+        if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
+
+        val candidate = File(driveRoot, segments.joinToString(File.separator)).canonicalFile
+        return candidate.takeIf { isWithinRoot(driveRoot, it) }
+    }
+
+    private fun isWithinRoot(root: File, candidate: File): Boolean {
+        val rootPath = root.canonicalPath
+        val candidatePath = candidate.canonicalPath
+        return candidatePath == rootPath || candidatePath.startsWith(rootPath + File.separator)
+    }
+
+    private fun joinRelativePath(parent: String, name: String): String =
+        if (parent.isBlank()) name else "$parent/$name"
 
     private fun readCapsule(directory: File, canonicalRoot: File): CapsuleInfo? {
         val canonicalDirectory = directory.canonicalFile
@@ -136,6 +303,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
     private fun isValidId(value: String): Boolean = CAPSULE_ID_PATTERN.matches(value)
 
     private companion object {
+        const val MAX_CAPSULE_FILE_BYTES: Long = 2L * 1024L * 1024L * 1024L
+
         val INITIAL_DIRECTORY_PATHS = listOf(
             "drive_c/Windows",
             "drive_c/Program Files",

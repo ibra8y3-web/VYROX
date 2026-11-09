@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
@@ -50,15 +52,30 @@ private val VyroxColors = darkColorScheme(
 fun VyroxApp(
     installers: List<ImportedInstaller>,
     capsules: List<CapsuleInfo>,
+    selectedCapsule: CapsuleInfo?,
+    selectedDrive: Char,
+    currentPath: String,
+    capsuleEntries: List<CapsuleFileEntry>,
     hostCapabilities: HostCapabilities,
     isImporting: Boolean,
     statusMessage: String?,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: (String) -> Unit,
-    onDeleteCapsule: (CapsuleInfo) -> Unit
+    onDeleteCapsule: (CapsuleInfo) -> Unit,
+    onOpenCapsule: (CapsuleInfo) -> Unit,
+    onCloseCapsuleExplorer: () -> Unit,
+    onSelectCapsuleDrive: (Char) -> Unit,
+    onNavigateCapsuleDirectory: (String) -> Unit,
+    onCreateCapsuleDirectory: (String) -> Unit,
+    onImportIntoCapsule: () -> Unit,
+    onDeleteCapsuleEntry: (CapsuleFileEntry) -> Unit
 ) {
     var capsuleName by remember { mutableStateOf("") }
+    var folderName by remember(selectedCapsule?.id, selectedDrive, currentPath) {
+        mutableStateOf("")
+    }
+    var pendingDeleteEntry by remember { mutableStateOf<CapsuleFileEntry?>(null) }
 
     MaterialTheme(colorScheme = VyroxColors) {
         Surface(
@@ -127,11 +144,36 @@ fun VyroxApp(
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 capsules.forEach { capsule ->
-                                    CapsuleRow(capsule = capsule, onDelete = onDeleteCapsule)
+                                    CapsuleRow(
+                                        capsule = capsule,
+                                        onOpen = onOpenCapsule,
+                                        onDelete = onDeleteCapsule
+                                    )
                                 }
                             }
                         }
                     }
+                }
+
+                if (selectedCapsule != null) {
+                    CapsuleExplorerCard(
+                        capsule = selectedCapsule,
+                        selectedDrive = selectedDrive,
+                        currentPath = currentPath,
+                        entries = capsuleEntries,
+                        folderName = folderName,
+                        isImporting = isImporting,
+                        onFolderNameChange = { folderName = it },
+                        onSelectDrive = onSelectCapsuleDrive,
+                        onNavigate = onNavigateCapsuleDirectory,
+                        onCreateFolder = {
+                            onCreateCapsuleDirectory(folderName)
+                            folderName = ""
+                        },
+                        onImportFile = onImportIntoCapsule,
+                        onClose = onCloseCapsuleExplorer,
+                        onRequestDelete = { pendingDeleteEntry = it }
+                    )
                 }
 
                 Card(
@@ -233,6 +275,38 @@ fun VyroxApp(
             }
         }
     }
+
+    if (pendingDeleteEntry != null) {
+        val entry = pendingDeleteEntry
+        AlertDialog(
+            onDismissRequest = { pendingDeleteEntry = null },
+            title = { Text("Remove ${entry?.name}?") },
+            text = {
+                Text(
+                    if (entry?.isDirectory == true) {
+                        "This folder and everything inside it will be deleted from the Capsule."
+                    } else {
+                        "This file will be deleted from the Capsule."
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        entry?.let(onDeleteCapsuleEntry)
+                        pendingDeleteEntry = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingDeleteEntry = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 
@@ -276,8 +350,149 @@ private fun HostReadinessCard(profile: HostCapabilities) {
 }
 
 @Composable
+private fun CapsuleExplorerCard(
+    capsule: CapsuleInfo,
+    selectedDrive: Char,
+    currentPath: String,
+    entries: List<CapsuleFileEntry>,
+    folderName: String,
+    isImporting: Boolean,
+    onFolderNameChange: (String) -> Unit,
+    onSelectDrive: (Char) -> Unit,
+    onNavigate: (String) -> Unit,
+    onCreateFolder: () -> Unit,
+    onImportFile: () -> Unit,
+    onClose: () -> Unit,
+    onRequestDelete: (CapsuleFileEntry) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = capsule.name + " — File explorer",
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(onClick = onClose) { Text("Close") }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (selectedDrive == 'C') {
+                    Button(onClick = { onSelectDrive('C') }) { Text("C: System") }
+                } else {
+                    OutlinedButton(onClick = { onSelectDrive('C') }) { Text("C: System") }
+                }
+                if (selectedDrive == 'D') {
+                    Button(onClick = { onSelectDrive('D') }) { Text("D: Data") }
+                } else {
+                    OutlinedButton(onClick = { onSelectDrive('D') }) { Text("D: Data") }
+                }
+            }
+
+            val drivePath = if (currentPath.isBlank()) {
+                "${selectedDrive}:\\"
+            } else {
+                "${selectedDrive}:\\${currentPath.replace('/', '\\\\')}"
+            }
+            Text(drivePath, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            Text(
+                "Files are stored inside this app. These folders are not mounted Windows drives.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = onFolderNameChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("New folder name") }
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onCreateFolder, enabled = folderName.trim().isNotEmpty()) {
+                    Text("Create folder")
+                }
+                OutlinedButton(onClick = onImportFile, enabled = !isImporting) {
+                    Text(if (isImporting) "Importing..." else "Import file")
+                }
+                if (currentPath.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = { onNavigate(currentPath.substringBeforeLast('/', "")) }
+                    ) {
+                        Text("Up")
+                    }
+                }
+            }
+
+            if (entries.isEmpty()) {
+                Text(
+                    "This folder is empty.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    entries.forEach { entry ->
+                        CapsuleFileRow(
+                            entry = entry,
+                            onOpen = { onNavigate(entry.relativePath) },
+                            onDelete = { onRequestDelete(entry) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CapsuleFileRow(
+    entry: CapsuleFileEntry,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(entry.name, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (entry.isDirectory) "Folder" else formatBytes(entry.sizeBytes),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (entry.isDirectory) {
+                OutlinedButton(onClick = onOpen) { Text("Open") }
+            }
+            OutlinedButton(onClick = onDelete) { Text("Remove") }
+        }
+    }
+}
+
+@Composable
 private fun CapsuleRow(
     capsule: CapsuleInfo,
+    onOpen: (CapsuleInfo) -> Unit,
     onDelete: (CapsuleInfo) -> Unit
 ) {
     Card(
@@ -300,6 +515,9 @@ private fun CapsuleRow(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
+            OutlinedButton(onClick = { onOpen(capsule) }) {
+                Text("Open")
             }
             OutlinedButton(onClick = { onDelete(capsule) }) {
                 Text("Delete")
