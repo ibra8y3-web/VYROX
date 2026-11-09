@@ -26,15 +26,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = false
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("17")
-    }
-
-    testOptions {
-        unitTests.isIncludeAndroidResources = false
     }
 }
 
