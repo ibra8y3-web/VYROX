@@ -19,16 +19,22 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import java.util.Locale
 
@@ -44,11 +50,16 @@ private val VyroxColors = darkColorScheme(
 @Composable
 fun VyroxApp(
     installers: List<ImportedInstaller>,
+    capsules: List<CapsuleInfo>,
     isImporting: Boolean,
     statusMessage: String?,
     onImport: () -> Unit,
-    onDelete: (ImportedInstaller) -> Unit
+    onDeleteInstaller: (ImportedInstaller) -> Unit,
+    onCreateCapsule: (String) -> Unit,
+    onDeleteCapsule: (CapsuleInfo) -> Unit
 ) {
+    var capsuleName by remember { mutableStateOf("") }
+
     MaterialTheme(colorScheme = VyroxColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -72,6 +83,53 @@ fun VyroxApp(
                         text = "Windows runtime environment for Android",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                     )
+                }
+
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Capsule workspaces", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(
+                            "Create separate private storage workspaces. These folders are not virtual machines or hardened security sandboxes.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                        )
+                        OutlinedTextField(
+                            value = capsuleName,
+                            onValueChange = { capsuleName = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Capsule name") }
+                        )
+                        Button(
+                            onClick = {
+                                onCreateCapsule(capsuleName)
+                                capsuleName = ""
+                            },
+                            enabled = capsuleName.trim().length >= 2,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Create Capsule")
+                        }
+                        if (capsules.isEmpty()) {
+                            Text(
+                                "No Capsules created yet.",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                capsules.forEach { capsule ->
+                                    CapsuleRow(capsule = capsule, onDelete = onDeleteCapsule)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Card(
@@ -146,7 +204,7 @@ fun VyroxApp(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         installers.forEach { installer ->
-                            InstallerRow(installer = installer, onDelete = onDelete)
+                            InstallerRow(installer = installer, onDelete = onDeleteInstaller)
                         }
                     }
                 }
@@ -170,6 +228,40 @@ fun VyroxApp(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun CapsuleRow(
+    capsule: CapsuleInfo,
+    onDelete: (CapsuleInfo) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(capsule.name, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Private workspace • metadata stored locally",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            OutlinedButton(onClick = { onDelete(capsule) }) {
+                Text("Delete")
             }
         }
     }

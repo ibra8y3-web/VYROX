@@ -11,17 +11,22 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import com.vyrox.runtime.core.capsule.CapsuleInfo
+import com.vyrox.runtime.core.capsule.CapsuleStorage
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
 import com.vyrox.runtime.ui.VyroxApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
     private lateinit var installerStorage: InstallerStorage
+    private lateinit var capsuleStorage: CapsuleStorage
     private val installers = mutableStateListOf<ImportedInstaller>()
+    private val capsules = mutableStateListOf<CapsuleInfo>()
 
     private var isImporting by mutableStateOf(false)
     private var statusMessage by mutableStateOf<String?>(null)
@@ -36,17 +41,22 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         installerStorage = InstallerStorage(applicationContext)
+        capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
         installers.addAll(installerStorage.listImported())
+        capsules.addAll(capsuleStorage.listCapsules())
 
         setContent {
             VyroxApp(
                 installers = installers.toList(),
+                capsules = capsules.toList(),
                 isImporting = isImporting,
                 statusMessage = statusMessage,
                 onImport = {
                     if (!isImporting) openInstaller.launch(arrayOf("*/*"))
                 },
-                onDelete = ::deleteInstaller
+                onDeleteInstaller = ::deleteInstaller,
+                onCreateCapsule = ::createCapsule,
+                onDeleteCapsule = ::deleteCapsule
             )
         }
     }
@@ -91,6 +101,39 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not remove the installer."
+            }
+        }
+    }
+
+
+    private fun createCapsule(rawName: String) {
+        lifecycleScope.launch {
+            try {
+                val capsule = withContext(Dispatchers.IO) {
+                    capsuleStorage.createCapsule(rawName)
+                }
+                capsules.add(0, capsule)
+                statusMessage = "Created Capsule: " + capsule.name
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not create the Capsule."
+            }
+        }
+    }
+
+    private fun deleteCapsule(capsule: CapsuleInfo) {
+        lifecycleScope.launch {
+            try {
+                val deleted = withContext(Dispatchers.IO) {
+                    capsuleStorage.deleteCapsule(capsule.id)
+                }
+                if (deleted) {
+                    capsules.removeAll { it.id == capsule.id }
+                    statusMessage = "Deleted Capsule: " + capsule.name
+                } else {
+                    statusMessage = "The Capsule could not be deleted."
+                }
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not delete the Capsule."
             }
         }
     }

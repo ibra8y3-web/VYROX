@@ -4,7 +4,7 @@
 
 VYROX is hosted by Android. It is not a replacement operating system. The project aims to provide managed workspaces ("Capsules") and, in later milestones, a tested compatibility runtime for selected Windows applications.
 
-> **Current status: foundation milestone.** The current Android app can import `.exe` and `.msi` installers into private app storage, list them, and remove them. It does not execute Windows programs. Wine, CPU translation, graphics translation, and Windows API compatibility are not integrated.
+> **Current status: foundation milestone.** The Android source includes file-based Capsule workspaces and can import `.exe` and `.msi` installers into private app storage, list them, and remove them. It does not execute Windows programs. Capsule folders are not virtual machines or hardened security sandboxes. Wine, CPU translation, graphics translation, and Windows API compatibility are not integrated.
 
 ## Implemented in source
 
@@ -15,6 +15,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - File-extension validation and a 2 GiB import limit.
 - Temporary-file copy followed by rename, so incomplete copies are not shown as imported.
 - Local installer list and remove action.
+- Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
 - Unit tests for installer extension validation and filename sanitization.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
@@ -22,7 +23,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 
 ## Not implemented
 
-- Capsule lifecycle and independent runtime environments.
+- VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
 - Wine or another Windows API compatibility layer.
 - x86/x64-to-ARM64 translation.
 - Vulkan, DXVK, or DirectX translation.
@@ -78,7 +79,7 @@ LICENSE
 ## Roadmap
 
 1. **Foundation:** Android shell, safe installer import, tests, and CI.
-2. **Capsule management:** create/list/remove workspaces and store per-Capsule metadata.
+2. **Capsule workspaces:** create/list/remove private file-based workspaces and persist per-Capsule metadata; this does not provide process or VM isolation.
 3. **Runtime research and integration:** evaluate Wine and CPU translation options, licenses, ABI requirements, and device compatibility.
 4. **Graphics and input:** validate Vulkan/GPU paths on supported devices.
 5. **Execution milestone:** launch a small, explicitly supported Windows test application on physical ARM64 hardware.
