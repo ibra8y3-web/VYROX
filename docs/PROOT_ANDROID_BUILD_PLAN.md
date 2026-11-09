@@ -24,6 +24,11 @@ Termux package build files: https://github.com/termux/termux-packages/tree/maste
 
 It does not start PRoot. The APK currently contains no PRoot binary.
 
+A separate `RuntimeProcessSupervisor` can start a validated command plan,
+capture combined stdout/stderr into a bounded private log, enforce a maximum
+runtime, and terminate the process. It is generic process supervision, not a
+security sandbox, and the VYROX UI does not yet invoke it for Windows programs.
+
 ## Required next steps
 
 1. Pin a specific Termux PRoot source revision and capture its full patch set.

@@ -24,6 +24,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, Windows x64 readiness planner, and PRoot command planner.
 - Linux RootFS TAR/TAR.GZ/TAR.XZ import per Capsule with architecture detection, SHA-256 metadata, safe staged extraction, and size/entry/path limits. This stages files only; no RootFS process is executed.
 - Validated PRoot command-plan generation with app-private path restrictions, guest command validation, bind-mount checks, and argument-vector construction; no PRoot binary is bundled or run.
+- Runtime process supervisor with timeout, explicit termination, bounded combined stdout/stderr capture, and private per-run logs; it is not a security sandbox and is not yet connected to a Windows engine.
 - PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
 - MSI Compound File Binary signature check before storing an MSI database.
 - SHA-256 verified runtime package installer with ABI checks, ZIP traversal protection, archive limits, and private atomic installation.
@@ -107,6 +108,7 @@ runtime-engine/
   src/test/kotlin/com/vyrox/engine/RuntimeCatalogTest.kt
   src/test/kotlin/com/vyrox/engine/LinuxRootFsManagerTest.kt
   src/test/kotlin/com/vyrox/engine/ProotCommandPlannerTest.kt
+  src/test/kotlin/com/vyrox/engine/RuntimeProcessSupervisorTest.kt
 build.gradle.kts
 settings.gradle.kts
 gradle.properties
