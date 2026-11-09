@@ -15,6 +15,8 @@ import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleStorage
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
+import com.vyrox.runtime.core.host.HostCapabilities
+import com.vyrox.runtime.core.host.HostCapabilitiesProbe
 import com.vyrox.runtime.ui.VyroxApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,6 +27,7 @@ import java.io.IOException
 class MainActivity : ComponentActivity() {
     private lateinit var installerStorage: InstallerStorage
     private lateinit var capsuleStorage: CapsuleStorage
+    private lateinit var hostCapabilities: HostCapabilities
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
 
@@ -42,6 +45,7 @@ class MainActivity : ComponentActivity() {
 
         installerStorage = InstallerStorage(applicationContext)
         capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
+        hostCapabilities = HostCapabilitiesProbe.read(applicationContext)
         installers.addAll(installerStorage.listImported())
         capsules.addAll(capsuleStorage.listCapsules())
 
@@ -49,6 +53,7 @@ class MainActivity : ComponentActivity() {
             VyroxApp(
                 installers = installers.toList(),
                 capsules = capsules.toList(),
+                hostCapabilities = hostCapabilities,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
                 onImport = {

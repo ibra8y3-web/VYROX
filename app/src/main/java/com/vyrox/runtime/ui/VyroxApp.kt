@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
+import com.vyrox.runtime.core.host.HostCapabilities
 import java.util.Locale
 
 private val VyroxColors = darkColorScheme(
@@ -51,6 +50,7 @@ private val VyroxColors = darkColorScheme(
 fun VyroxApp(
     installers: List<ImportedInstaller>,
     capsules: List<CapsuleInfo>,
+    hostCapabilities: HostCapabilities,
     isImporting: Boolean,
     statusMessage: String?,
     onImport: () -> Unit,
@@ -85,6 +85,8 @@ fun VyroxApp(
                     )
                 }
 
+
+                HostReadinessCard(hostCapabilities)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -233,6 +235,40 @@ fun VyroxApp(
     }
 }
 
+
+@Composable
+private fun HostReadinessCard(profile: HostCapabilities) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Text("Device readiness", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Supported ABIs: " + profile.supportedAbis.joinToString().ifBlank { "Unknown" })
+            Text(
+                "CPU cores: ${profile.logicalCpuCount} • RAM: ${formatBytes(profile.totalMemoryBytes)}",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+            )
+            Text(
+                if (profile.supportsArm64RuntimeHost) {
+                    "ARM64 64-bit host detected. This is suitable for the first engine-integration target."
+                } else {
+                    "ARM64 64-bit host ABI was not detected. The first engine target may not support this device."
+                },
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Text(
+                "Hardware detection only: Wine, CPU translation, and Windows execution are not installed.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
 
 @Composable
 private fun CapsuleRow(

@@ -17,6 +17,8 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Local installer list and remove action.
 - Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
 - File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
+- Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
+- File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
 - Unit tests for installer policy, filename sanitization, Capsule metadata, workspace layout, and safe drive lookup.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 
@@ -28,6 +30,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 - Mountable Windows drive mapping and a Capsule file browser.
 - Wine or another Windows API compatibility layer.
 - x86/x64-to-ARM64 translation.
+- A Windows compatibility runtime, native CPU translator, or Windows process loader.
 - Vulkan, DXVK, or DirectX translation.
 - Windows process execution or application launch.
 - A hardened VM or security sandbox.
@@ -88,7 +91,7 @@ LICENSE
 
 1. **Foundation:** Android shell, safe installer import, tests, and CI.
 2. **Capsule workspaces:** create/list/remove private file-based workspaces, persist metadata, and prepare C:/D: directory layouts; this does not provide process or VM isolation.
-3. **Runtime research and integration:** evaluate Wine and CPU translation options, licenses, ABI requirements, and device compatibility.
+3. **Host and runtime integration:** use the real Android ABI probe to plan an NDK/CMake runtime build; evaluate Wine and Linux user-space CPU translators, licenses, ABI requirements, and device compatibility before bundling any engine.
 4. **Graphics and input:** validate Vulkan/GPU paths on supported devices.
 5. **Execution milestone:** launch a small, explicitly supported Windows test application on physical ARM64 hardware.
 6. **Hardening:** security review, resource limits, diagnostics, and reproducible builds.
