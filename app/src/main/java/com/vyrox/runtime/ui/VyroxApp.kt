@@ -341,6 +341,17 @@ private fun HostReadinessCard(profile: HostCapabilities) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
+                "Vulkan: " + (profile.nativeVulkanInfo ?: "not available on this device"),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2
+            )
+            Text(
+                "Vulkan detection does not prove DXVK or DirectX compatibility.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
                 "Hardware detection only: Wine, CPU translation, and Windows execution are not installed.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 style = MaterialTheme.typography.bodySmall

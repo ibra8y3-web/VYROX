@@ -19,7 +19,8 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Capsule file explorer with C:/D: navigation, folder creation, file import, and safe delete actions.
 - File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
 - Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
-- Initial JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
+- JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
+- Vulkan capability probe reports whether a Vulkan physical device is available, its name, API version, and driver version when supported.
 - Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, and deletion.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 - Deterministic build-failure diagnostic report uploaded as a separate artifact when CI fails.
@@ -33,6 +34,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 - Wine or another Windows API compatibility layer.
 - x86/x64-to-ARM64 translation.
 - A Windows compatibility runtime, native CPU translator, or Windows process loader.
+- DXVK, VKD3D-Proton, DirectX execution, or validation of required Vulkan extensions/features.
 - Vulkan, DXVK, or DirectX translation.
 - Windows process execution or application launch.
 - A hardened VM or security sandbox.

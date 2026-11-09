@@ -9,7 +9,8 @@ data class HostCapabilities(
     val supported64BitAbis: List<String>,
     val logicalCpuCount: Int,
     val totalMemoryBytes: Long,
-    val nativeBuildInfo: String? = null
+    val nativeBuildInfo: String? = null,
+    val nativeVulkanInfo: String? = null
 ) {
     val supportsArm64RuntimeHost: Boolean
         get() = ARM64_ABI in supported64BitAbis
@@ -35,7 +36,8 @@ object HostCapabilitiesProbe {
             supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS?.toList().orEmpty(),
             logicalCpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
             totalMemoryBytes = memoryInfo.totalMem.coerceAtLeast(0L),
-            nativeBuildInfo = NativeHostBridge.readBuildInfo()
+            nativeBuildInfo = NativeHostBridge.readBuildInfo(),
+            nativeVulkanInfo = NativeHostBridge.readVulkanInfo()
         )
     }
 }

@@ -14,5 +14,12 @@ object NativeHostBridge {
         return runCatching { nativeBuildInfo() }.getOrNull()
     }
 
+    fun readVulkanInfo(): String? {
+        if (!libraryAvailable) return null
+        return runCatching { nativeVulkanInfo() }.getOrNull()
+    }
+
     private external fun nativeBuildInfo(): String
+
+    private external fun nativeVulkanInfo(): String
 }

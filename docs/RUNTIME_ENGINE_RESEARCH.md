@@ -58,8 +58,9 @@ checked at the pinned revision.
 1. **Host profile:** implemented in the Android app; unit tests verify the ARM64
    ABI decision.
 2. **Native build infrastructure:** implemented with a pinned NDK/CMake build and
-   a small JNI host-information library. This proves native compilation and loading,
-   not Windows runtime support.
+   a JNI host-information library. A Vulkan probe also reports the first available
+   physical device and API/driver versions. This does not validate DXVK-required
+   extensions or Windows graphics execution.
 3. **Linux user-space and Wine:** select an Android-compatible build strategy,
    pin upstream revisions, document how glibc/Bionic boundaries are handled, and
    build an ARM64 Wine runtime.
