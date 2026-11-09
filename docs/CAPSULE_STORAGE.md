@@ -36,6 +36,11 @@ The initial file-backed layout is:
 - `importFile` copies a SAF-provided stream through a temporary file, enforces a
   2 GiB size limit, and refuses to overwrite an existing name.
 - `deleteEntry` removes a selected entry only after the UI confirms the action.
+- `renameEntry`, `moveEntry`, and `copyEntry` provide same-drive file operations.
+- `searchEntries` performs a case-insensitive search, capped at 500 results and
+  20,000 visited entries per query.
+- Recursive copies reject symbolic links, are staged in a temporary folder, and
+  are limited to 8 GiB / 10,000 entries before final rename.
 - Other drive letters and invalid Capsule IDs are rejected.
 - Capsule deletion removes that Capsule's metadata and workspace tree only.
 
@@ -43,7 +48,9 @@ The initial file-backed layout is:
 
 These are ordinary directories in Android app-private storage. The in-app file
 explorer can browse them, create folders, import files, and delete selected
-entries. They are not mounted filesystems, Windows drive letters visible to a
+entries, rename/move/copy items, and search folders. Symbolic links are hidden
+from normal browsing and are rejected by path resolution and copy operations.
+They are not mounted filesystems, Windows drive letters visible to a
 Windows process, a virtual hard disk, a VM, or a security sandbox. No Windows
 process can use these paths until a future runtime layer explicitly maps them.
 

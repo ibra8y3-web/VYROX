@@ -113,6 +113,90 @@ class CapsuleStorageTest {
     }
 
     @Test
+    fun renamesMovesCopiesAndSearchesCapsuleEntries() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("File operations")
+        storage.createDirectory(capsule.id, 'D', "Downloads", "Projects")
+        val imported = storage.importFile(
+            capsule.id,
+            'D',
+            "Downloads/Projects",
+            "build.log",
+            ByteArrayInputStream("first build".toByteArray())
+        )
+
+        val renamed = storage.renameEntry(
+            capsule.id,
+            'D',
+            imported.relativePath,
+            "build-output.log"
+        )
+        assertEquals("Downloads/Projects/build-output.log", renamed.relativePath)
+
+        val copied = storage.copyEntry(
+            capsule.id,
+            'D',
+            renamed.relativePath,
+            "Documents"
+        )
+        assertEquals("Documents/build-output.log", copied.relativePath)
+
+        val moved = storage.moveEntry(
+            capsule.id,
+            'D',
+            renamed.relativePath,
+            "Games"
+        )
+        assertEquals("Games/build-output.log", moved.relativePath)
+
+        val matches = storage.searchEntries(capsule.id, 'D', "BUILD")
+        assertEquals(
+            setOf("Documents/build-output.log", "Games/build-output.log"),
+            matches.map { it.relativePath }.toSet()
+        )
+        assertTrue(storage.listDirectory(capsule.id, 'D', "Downloads/Projects").isEmpty())
+    }
+
+    @Test
+    fun rejectsMovingOrCopyingFolderIntoItself() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("No recursive loop")
+        storage.createDirectory(capsule.id, 'D', "Downloads", "Projects")
+
+        var moveRejected = false
+        try {
+            storage.moveEntry(capsule.id, 'D', "Downloads/Projects", "Downloads/Projects")
+        } catch (_: IllegalArgumentException) {
+            moveRejected = true
+        }
+        assertTrue(moveRejected)
+
+        var copyRejected = false
+        try {
+            storage.copyEntry(capsule.id, 'D', "Downloads/Projects", "Downloads/Projects")
+        } catch (_: IllegalArgumentException) {
+            copyRejected = true
+        }
+        assertTrue(copyRejected)
+    }
+
+    @Test
+    fun rejectsCaseInsensitiveRenameCollision() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Rename collision")
+        storage.createDirectory(capsule.id, 'D', "Downloads", "One")
+        storage.createDirectory(capsule.id, 'D', "Downloads", "Two")
+
+        var duplicateRejected = false
+        try {
+            storage.renameEntry(capsule.id, 'D', "Downloads/Two", "oNE")
+        } catch (_: java.io.IOException) {
+            duplicateRejected = true
+        }
+        assertTrue(duplicateRejected)
+    }
+
+    @Test
     fun rejectsCapsuleFilePathTraversalAndWindowsInvalidNames() {
         val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
         val capsule = storage.createCapsule("Safe paths")
