@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
     private val capsuleEntries = mutableStateListOf<CapsuleFileEntry>()
+    private val capsuleSearchResults = mutableStateListOf<CapsuleFileEntry>()
 
     private var selectedCapsule by mutableStateOf<CapsuleInfo?>(null)
     private var selectedDrive by mutableStateOf('C')
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                 selectedDrive = selectedDrive,
                 currentPath = selectedPath,
                 capsuleEntries = capsuleEntries.toList(),
+                capsuleSearchResults = capsuleSearchResults.toList(),
                 hostCapabilities = hostCapabilities,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
@@ -87,7 +89,12 @@ class MainActivity : ComponentActivity() {
                 onNavigateCapsuleDirectory = ::navigateCapsuleDirectory,
                 onCreateCapsuleDirectory = ::createCapsuleDirectory,
                 onImportIntoCapsule = ::requestCapsuleImport,
-                onDeleteCapsuleEntry = ::deleteCapsuleEntry
+                onDeleteCapsuleEntry = ::deleteCapsuleEntry,
+                onRenameCapsuleEntry = ::renameCapsuleEntry,
+                onCopyCapsuleEntry = ::copyCapsuleEntry,
+                onMoveCapsuleEntry = ::moveCapsuleEntry,
+                onSearchCapsuleEntries = ::searchCapsuleEntries,
+                onSelectCapsuleSearchResult = ::selectCapsuleSearchResult
             )
         }
     }
@@ -175,6 +182,7 @@ class MainActivity : ComponentActivity() {
         selectedDrive = 'C'
         selectedPath = ""
         capsuleEntries.clear()
+        capsuleSearchResults.clear()
         refreshCapsuleDirectory()
     }
 
@@ -182,17 +190,20 @@ class MainActivity : ComponentActivity() {
         selectedCapsule = null
         selectedPath = ""
         capsuleEntries.clear()
+        capsuleSearchResults.clear()
     }
 
     private fun selectCapsuleDrive(driveLetter: Char) {
         if (driveLetter != 'C' && driveLetter != 'D') return
         selectedDrive = driveLetter
         selectedPath = ""
+        capsuleSearchResults.clear()
         refreshCapsuleDirectory()
     }
 
     private fun navigateCapsuleDirectory(relativePath: String) {
         selectedPath = relativePath
+        capsuleSearchResults.clear()
         refreshCapsuleDirectory()
     }
 
@@ -253,6 +264,85 @@ class MainActivity : ComponentActivity() {
                 statusMessage = exception.message ?: "Could not remove the item."
             }
         }
+    }
+
+    private fun renameCapsuleEntry(entry: CapsuleFileEntry, newName: String) {
+        val capsule = selectedCapsule ?: return
+        val drive = selectedDrive
+        lifecycleScope.launch {
+            try {
+                val renamed = withContext(Dispatchers.IO) {
+                    capsuleStorage.renameEntry(capsule.id, drive, entry.relativePath, newName)
+                }
+                statusMessage = "Renamed: " + renamed.name
+                capsuleSearchResults.clear()
+                refreshCapsuleDirectory()
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not rename the Capsule item."
+            }
+        }
+    }
+
+    private fun copyCapsuleEntry(entry: CapsuleFileEntry, destinationPath: String) {
+        val capsule = selectedCapsule ?: return
+        val drive = selectedDrive
+        lifecycleScope.launch {
+            try {
+                val copied = withContext(Dispatchers.IO) {
+                    capsuleStorage.copyEntry(capsule.id, drive, entry.relativePath, destinationPath)
+                }
+                statusMessage = "Copied to: " + copied.relativePath
+                capsuleSearchResults.clear()
+                refreshCapsuleDirectory()
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not copy the Capsule item."
+            }
+        }
+    }
+
+    private fun moveCapsuleEntry(entry: CapsuleFileEntry, destinationPath: String) {
+        val capsule = selectedCapsule ?: return
+        val drive = selectedDrive
+        lifecycleScope.launch {
+            try {
+                val moved = withContext(Dispatchers.IO) {
+                    capsuleStorage.moveEntry(capsule.id, drive, entry.relativePath, destinationPath)
+                }
+                statusMessage = "Moved to: " + moved.relativePath
+                capsuleSearchResults.clear()
+                refreshCapsuleDirectory()
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not move the Capsule item."
+            }
+        }
+    }
+
+    private fun searchCapsuleEntries(query: String) {
+        val capsule = selectedCapsule ?: return
+        val drive = selectedDrive
+        lifecycleScope.launch {
+            try {
+                val matches = withContext(Dispatchers.IO) {
+                    capsuleStorage.searchEntries(capsule.id, drive, query)
+                }
+                if (selectedCapsule?.id == capsule.id && selectedDrive == drive) {
+                    capsuleSearchResults.clear()
+                    capsuleSearchResults.addAll(matches)
+                    statusMessage = "Search results: " + matches.size
+                }
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not search this Capsule drive."
+            }
+        }
+    }
+
+    private fun selectCapsuleSearchResult(entry: CapsuleFileEntry) {
+        val targetPath = if (entry.isDirectory) {
+            entry.relativePath
+        } else {
+            entry.relativePath.substringBeforeLast('/', "")
+        }
+        navigateCapsuleDirectory(targetPath)
     }
 
     private fun requestCapsuleImport() {

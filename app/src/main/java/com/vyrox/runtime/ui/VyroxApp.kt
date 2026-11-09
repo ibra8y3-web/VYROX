@@ -60,6 +60,7 @@ fun VyroxApp(
     selectedDrive: Char,
     currentPath: String,
     capsuleEntries: List<CapsuleFileEntry>,
+    capsuleSearchResults: List<CapsuleFileEntry>,
     hostCapabilities: HostCapabilities,
     isImporting: Boolean,
     statusMessage: String?,
@@ -73,13 +74,22 @@ fun VyroxApp(
     onNavigateCapsuleDirectory: (String) -> Unit,
     onCreateCapsuleDirectory: (String) -> Unit,
     onImportIntoCapsule: () -> Unit,
-    onDeleteCapsuleEntry: (CapsuleFileEntry) -> Unit
+    onDeleteCapsuleEntry: (CapsuleFileEntry) -> Unit,
+    onRenameCapsuleEntry: (CapsuleFileEntry, String) -> Unit,
+    onCopyCapsuleEntry: (CapsuleFileEntry, String) -> Unit,
+    onMoveCapsuleEntry: (CapsuleFileEntry, String) -> Unit,
+    onSearchCapsuleEntries: (String) -> Unit,
+    onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit
 ) {
     var capsuleName by remember { mutableStateOf("") }
     var folderName by remember(selectedCapsule?.id, selectedDrive, currentPath) {
         mutableStateOf("")
     }
     var pendingDeleteEntry by remember { mutableStateOf<CapsuleFileEntry?>(null) }
+    var pendingRenameEntry by remember { mutableStateOf<CapsuleFileEntry?>(null) }
+    var renameValue by remember { mutableStateOf("") }
+    var destinationPath by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
+    var searchQuery by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
 
     MaterialTheme(colorScheme = VyroxColors) {
         Surface(
@@ -166,9 +176,22 @@ fun VyroxApp(
                         selectedDrive = selectedDrive,
                         currentPath = currentPath,
                         entries = capsuleEntries,
+                        searchResults = capsuleSearchResults,
                         folderName = folderName,
+                        destinationPath = destinationPath,
+                        searchQuery = searchQuery,
                         isImporting = isImporting,
                         onFolderNameChange = { folderName = it },
+                        onDestinationPathChange = { destinationPath = it },
+                        onSearchQueryChange = { searchQuery = it },
+                        onSearch = { onSearchCapsuleEntries(searchQuery) },
+                        onSelectSearchResult = onSelectCapsuleSearchResult,
+                        onRenameEntry = {
+                            pendingRenameEntry = it
+                            renameValue = it.name
+                        },
+                        onCopyEntry = { entry -> onCopyCapsuleEntry(entry, destinationPath) },
+                        onMoveEntry = { entry -> onMoveCapsuleEntry(entry, destinationPath) },
                         onSelectDrive = onSelectCapsuleDrive,
                         onNavigate = onNavigateCapsuleDirectory,
                         onCreateFolder = {
@@ -279,6 +302,38 @@ fun VyroxApp(
                 }
             }
         }
+    }
+
+    if (pendingRenameEntry != null) {
+        val entry = pendingRenameEntry
+        AlertDialog(
+            onDismissRequest = { pendingRenameEntry = null },
+            title = { Text("Rename ${entry?.name}") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    label = { Text("New name") }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        entry?.let { onRenameCapsuleEntry(it, renameValue) }
+                        pendingRenameEntry = null
+                    },
+                    enabled = renameValue.trim().isNotEmpty()
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingRenameEntry = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (pendingDeleteEntry != null) {
@@ -438,9 +493,19 @@ private fun CapsuleExplorerCard(
     selectedDrive: Char,
     currentPath: String,
     entries: List<CapsuleFileEntry>,
+    searchResults: List<CapsuleFileEntry>,
     folderName: String,
+    destinationPath: String,
+    searchQuery: String,
     isImporting: Boolean,
     onFolderNameChange: (String) -> Unit,
+    onDestinationPathChange: (String) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onSelectSearchResult: (CapsuleFileEntry) -> Unit,
+    onRenameEntry: (CapsuleFileEntry) -> Unit,
+    onCopyEntry: (CapsuleFileEntry) -> Unit,
+    onMoveEntry: (CapsuleFileEntry) -> Unit,
     onSelectDrive: (Char) -> Unit,
     onNavigate: (String) -> Unit,
     onCreateFolder: () -> Unit,
@@ -517,6 +582,53 @@ private fun CapsuleExplorerCard(
                 }
             }
 
+            OutlinedTextField(
+                value = destinationPath,
+                onValueChange = onDestinationPathChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Copy / move destination path (blank = drive root)") }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("Search this drive") }
+                )
+                Button(onClick = onSearch, enabled = searchQuery.trim().isNotEmpty()) {
+                    Text("Search")
+                }
+            }
+
+            if (searchResults.isNotEmpty()) {
+                Text("Search results", fontWeight = FontWeight.SemiBold)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    searchResults.forEach { result ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                result.relativePath,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            OutlinedButton(onClick = { onSelectSearchResult(result) }) {
+                                Text("Locate")
+                            }
+                        }
+                    }
+                }
+            }
+
             if (entries.isEmpty()) {
                 Text(
                     "This folder is empty.",
@@ -528,6 +640,9 @@ private fun CapsuleExplorerCard(
                         CapsuleFileRow(
                             entry = entry,
                             onOpen = { onNavigate(entry.relativePath) },
+                            onRename = { onRenameEntry(entry) },
+                            onCopy = { onCopyEntry(entry) },
+                            onMove = { onMoveEntry(entry) },
                             onDelete = { onRequestDelete(entry) }
                         )
                     }
@@ -541,6 +656,9 @@ private fun CapsuleExplorerCard(
 private fun CapsuleFileRow(
     entry: CapsuleFileEntry,
     onOpen: () -> Unit,
+    onRename: () -> Unit,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -567,6 +685,9 @@ private fun CapsuleFileRow(
             if (entry.isDirectory) {
                 OutlinedButton(onClick = onOpen) { Text("Open") }
             }
+            OutlinedButton(onClick = onRename) { Text("Rename") }
+            OutlinedButton(onClick = onCopy) { Text("Copy") }
+            OutlinedButton(onClick = onMove) { Text("Move") }
             OutlinedButton(onClick = onDelete) { Text("Remove") }
         }
     }
