@@ -21,8 +21,9 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
 - JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
 - Vulkan capability probe reports the physical device, API/driver versions, required DXVK extension names, push-constant size, and descriptor-indexing support when exposed by the driver.
-- Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, and Windows x64 readiness planner.
+- Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, Windows x64 readiness planner, and PRoot command planner.
 - Linux RootFS TAR/TAR.GZ/TAR.XZ import per Capsule with architecture detection, SHA-256 metadata, safe staged extraction, and size/entry/path limits. This stages files only; no RootFS process is executed.
+- Validated PRoot command-plan generation with app-private path restrictions, guest command validation, bind-mount checks, and argument-vector construction; no PRoot binary is bundled or run.
 - PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
 - MSI Compound File Binary signature check before storing an MSI database.
 - SHA-256 verified runtime package installer with ABI checks, ZIP traversal protection, archive limits, and private atomic installation.
@@ -37,7 +38,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 - VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
 - Mountable Windows drive mapping; the current file explorer operates on app-private file-backed directories only.
 - Wine or another Windows API compatibility layer.
-- Wine prefix, Box64/FEX translator, DXVK, or VKD3D-Proton runtime. Imported RootFS images are stored but not executed.
+- PRoot binary, Wine prefix, Box64/FEX translator, DXVK, or VKD3D-Proton runtime. Imported RootFS images are stored but not executed.
 - x86/x64-to-ARM64 translation.
 - A Windows compatibility runtime, native CPU translator, or Windows process loader.
 - DXVK, VKD3D-Proton, DirectX execution, or validation of required Vulkan extensions/features.
@@ -105,6 +106,7 @@ runtime-engine/
   src/main/kotlin/com/vyrox/engine/RuntimeCatalog.kt
   src/test/kotlin/com/vyrox/engine/RuntimeCatalogTest.kt
   src/test/kotlin/com/vyrox/engine/LinuxRootFsManagerTest.kt
+  src/test/kotlin/com/vyrox/engine/ProotCommandPlannerTest.kt
 build.gradle.kts
 settings.gradle.kts
 gradle.properties

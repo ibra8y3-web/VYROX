@@ -81,3 +81,18 @@ checked at the pinned revision.
 
 Do not mark a gate complete because dependencies downloaded or a native library
 compiled. Windows execution requires the physical-device proof in gate 6.
+
+
+## PRoot boundary
+
+PRoot is the missing userland launcher between an imported Linux RootFS and Wine.
+It relies on `ptrace` and implements rootfs redirection/bind mounts in user space.
+The current code includes a command planner that validates the RootFS path,
+guest executable, bind source roots, and argument vector. It deliberately does
+not start a process until an Android-compatible PRoot executable is built,
+licensed, packaged, and verified on a real device.
+
+The Termux PRoot fork and package build process are the most useful Android
+references. VYROX must use a pinned Termux-derived source revision and review
+its patches, dependencies, and GPL notices. A generic desktop Linux PRoot binary
+is not assumed to run on Android.
