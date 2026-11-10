@@ -201,6 +201,7 @@ class MainActivity : ComponentActivity() {
                     if (!isImporting) openInstaller.launch(arrayOf("*/*"))
                 },
                 onDeleteInstaller = ::deleteInstaller,
+                onInstallImportedInstaller = ::installImportedInstaller,
                 onCreateCapsule = ::createCapsule,
                 onDeleteCapsule = ::deleteCapsule,
                 onOpenCapsule = ::openCapsule,
@@ -279,6 +280,76 @@ class MainActivity : ComponentActivity() {
             } finally {
                 isImporting = false
             }
+        }
+    }
+
+    private fun installImportedInstaller(installer: ImportedInstaller) {
+        if (isImporting || windowsDesktopVisible) return
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open the target Capsule before installing this Windows program."
+            return
+        }
+        val prefix = winePrefixInfo?.takeIf { it.capsuleId == capsule.id } ?: run {
+            statusMessage = "Create and verify this Capsule's Wine prefix before installing an EXE/MSI."
+            return
+        }
+        if (!box64Installed || !wineInstalled) {
+            statusMessage = "Build Box64 and install Wine 11+ before installing Windows software."
+            return
+        }
+        val kind = when (installer.displayName.substringAfterLast('.', "").lowercase()) {
+            "exe" -> WindowsInstallerKind.EXE
+            "msi" -> WindowsInstallerKind.MSI
+            else -> {
+                statusMessage = "ZIP files are archives. Extract them into the Capsule instead of installing them as EXE/MSI."
+                return
+            }
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Copying " + installer.displayName + " into Capsule " + capsule.name + "..."
+            var copiedEntry: CapsuleFileEntry? = null
+            try {
+                copiedEntry = withContext(Dispatchers.IO) {
+                    val children = capsuleStorage.listDirectory(capsule.id, 'C', "")
+                    val downloads = children.firstOrNull {
+                        it.isDirectory && it.name.equals("Downloads", ignoreCase = true)
+                    }?.relativePath ?: capsuleStorage.createDirectory(
+                        capsule.id, 'C', "", "Downloads"
+                    ).relativePath
+                    val targetName = UUID.randomUUID().toString().take(8) + "_" + installer.displayName
+                    installerStorage.openImportedInstaller(installer).use { input ->
+                        capsuleStorage.importFile(
+                            capsuleId = capsule.id,
+                            driveLetter = 'C',
+                            parentRelativePath = downloads,
+                            displayName = targetName,
+                            input = input
+                        )
+                    }
+                }
+                statusMessage = "Copied " + installer.displayName +
+                    " into C:\\Downloads. Starting it inside this Capsule..."
+            } catch (exception: Exception) {
+                statusMessage = "Could not install " + installer.displayName + ": " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                isImporting = false
+            }
+
+            val entry = copiedEntry ?: return@launch
+            if (selectedCapsule?.id != capsule.id || winePrefixInfo?.capsuleId != capsule.id) {
+                statusMessage = "The installer was copied into " + capsule.name +
+                    " but the selected Capsule changed. Open that Capsule to run it."
+                return@launch
+            }
+            runWindowsTarget(
+                capsule = capsule,
+                guestTargetPath = prefix.guestDriveCPath + "/" + entry.relativePath,
+                kind = kind,
+                displayName = installer.displayName
+            )
         }
     }
 
