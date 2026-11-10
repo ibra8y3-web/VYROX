@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Prefix storage lifecycle and integrity validator implemented; Wine itself is not integrated.** `WinePrefixManager` can stage a per-Capsule prefix, validate the actual registry files and default drive links produced by a real `wineboot -u`, redirect C:/D: to the Capsule's guest mount targets, then atomically activate and inspect the prefix. It never fabricates Registry files. No app action invokes Wine yet, so VYROX does not currently create a valid Wine prefix, install a Windows application through Wine, or launch a Windows PE file. An empty directory with a `system.reg` placeholder is not a Wine prefix and must never be shown as ready.
+**Prefix storage lifecycle and integrity validator implemented; Wine itself is not integrated.** `WinePrefixManager` can stage a per-Capsule prefix, validate the actual registry files and default drive links produced by a real `wineboot -u`, redirect C:/D: to the Capsule's guest mount targets, then atomically activate and inspect the prefix. The selected Capsule's UI now reads and displays only a verified prefix record from its ARM64 RootFS. It never fabricates Registry files. No app action invokes Wine yet, so VYROX does not currently create a valid Wine prefix, install a Windows application through Wine, or launch a Windows PE file. An empty directory with a `system.reg` placeholder is not a Wine prefix and must never be shown as ready.
 
 The current target is an ARM64 Android device running an imported ARM64 glibc Linux RootFS under the CI-built Android PRoot package. Box64 has a pinned in-RootFS build action that will require a successful x86-64 syscall smoke test before the app marks it installed.
 
@@ -91,7 +91,7 @@ No install/run buttons should be enabled until the Wine package and prefix readi
 | ARM64 glibc RootFS import/validation | Implemented; physical-device execution still unverified |
 | Box64 v0.4.4 source build | Wired into the app; requires a successful in-RootFS build and smoke test when run |
 | Wine 11.0 WoW64 | Architecture chosen; binaries/packages not integrated |
-| Per-Capsule Wine prefixes | Transactional storage/verification manager and tests implemented; no real prefix is created until Wine/wineboot is integrated |
+| Per-Capsule Wine prefixes | Transactional storage/verification manager, symlink-ticket protection, tests and UI integrity status implemented; no real prefix is created until Wine/wineboot is integrated |
 | EXE/MSI installation and launch | Not integrated |
 | DXVK/VKD3D-Proton | Not integrated |
 | Keyboard, pointer, controller, window and audio bridges | Not integrated |

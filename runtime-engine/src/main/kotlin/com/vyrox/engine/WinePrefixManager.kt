@@ -191,7 +191,11 @@ class WinePrefixManager(
         ticket: WinePrefixCreationTicket
     ): File {
         requireValidCapsuleId(ticket.capsuleId)
-        val staging = ticket.stagingDirectory.canonicalFile
+        val stagingCandidate = ticket.stagingDirectory.absoluteFile
+        if (Files.isSymbolicLink(stagingCandidate.toPath())) {
+            throw SecurityException("Wine prefix staging ticket cannot reference a symbolic link.")
+        }
+        val staging = stagingCandidate.canonicalFile
         if (
             staging.parentFile != prefixRoot ||
             !staging.name.startsWith(".staging-" + ticket.capsuleId + "-") ||

@@ -27,6 +27,8 @@ import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.LinuxRootFsManager
 import com.vyrox.engine.LinuxRootFsArchitecture
 import com.vyrox.engine.Box64BuildPlan
+import com.vyrox.engine.WinePrefixInfo
+import com.vyrox.engine.WinePrefixManager
 import com.vyrox.engine.ProotCommandPlanner
 import com.vyrox.engine.ProotBindMount
 import com.vyrox.engine.ProotLaunchRequest
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var rootFsManager: LinuxRootFsManager
     private var prootBinaryAvailable by mutableStateOf(false)
     private var box64Installed by mutableStateOf(false)
+    private var winePrefixInfo by mutableStateOf<WinePrefixInfo?>(null)
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
     private val capsuleSnapshots = mutableStateListOf<CapsuleSnapshotInfo>()
@@ -139,6 +142,7 @@ class MainActivity : ComponentActivity() {
                 hostCapabilities = hostCapabilities,
                 prootBinaryAvailable = prootBinaryAvailable,
                 box64Installed = box64Installed,
+                winePrefixInfo = winePrefixInfo,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
                 isDesktopMode = desktopModeEnabled,
@@ -446,6 +450,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openCapsule(capsule: CapsuleInfo) {
         box64Installed = false
+        winePrefixInfo = null
         selectedCapsule = capsule
         selectedDrive = 'C'
         selectedPath = ""
@@ -458,6 +463,7 @@ class MainActivity : ComponentActivity() {
 
     private fun closeCapsuleExplorer() {
         box64Installed = false
+        winePrefixInfo = null
         selectedCapsule = null
         selectedPath = ""
         capsuleEntries.clear()
@@ -623,17 +629,26 @@ class MainActivity : ComponentActivity() {
             try {
                 val rootFsState = withContext(Dispatchers.IO) {
                     val installed = rootFsManager.listInstalled(capsule.id)
-                    val hasBox64 = installed.any { info ->
-                        info.architecture == LinuxRootFsArchitecture.ARM64 &&
-                            rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
-                                ?.let(Box64BuildPlan::isInstalled) == true
+                    val arm64RootFs = installed.firstOrNull {
+                        it.architecture == LinuxRootFsArchitecture.ARM64
                     }
-                    installed to hasBox64
+                    val hasBox64 = arm64RootFs
+                        ?.let { info ->
+                            rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
+                                ?.let(Box64BuildPlan::isInstalled)
+                        } == true
+                    val prefixInfo = arm64RootFs
+                        ?.let { info ->
+                            rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
+                                ?.let { WinePrefixManager(it).inspect(capsule.id) }
+                        }
+                    Triple(installed, hasBox64, prefixInfo)
                 }
                 if (selectedCapsule?.id == capsule.id) {
                     rootFsImages.clear()
                     rootFsImages.addAll(rootFsState.first)
                     box64Installed = rootFsState.second
+                    winePrefixInfo = rootFsState.third
                 }
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not read installed Linux RootFS images."

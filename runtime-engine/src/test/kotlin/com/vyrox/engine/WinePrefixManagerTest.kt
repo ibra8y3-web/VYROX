@@ -107,6 +107,25 @@ class WinePrefixManagerTest {
     }
 
     @Test
+    fun rejectsSymbolicLinkStagingTicketBeforeCanonicalResolution() {
+        val root = newRootFs()
+        try {
+            val manager = WinePrefixManager(root)
+            val ticket = manager.prepareCreation(UUID.randomUUID().toString())
+            val alias = File(ticket.stagingDirectory.parentFile, ".staging-" + ticket.capsuleId + "-alias")
+            Files.createSymbolicLink(alias.toPath(), ticket.stagingDirectory.toPath())
+            val forged = ticket.copy(stagingDirectory = alias)
+
+            assertThrows(SecurityException::class.java) {
+                manager.finalizeCreation(forged, 0, "wine-11.0")
+            }
+            assertTrue(manager.abortCreation(ticket))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun refusesToOverwriteAnExistingPrefix() {
         val root = newRootFs()
         try {

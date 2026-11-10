@@ -44,6 +44,7 @@ import com.vyrox.engine.VulkanProbeParser
 import com.vyrox.engine.X64RuntimePrerequisites
 import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.LinuxRootFsArchitecture
+import com.vyrox.engine.WinePrefixInfo
 import java.util.Locale
 
 private val VyroxColors = darkColorScheme(
@@ -70,6 +71,7 @@ fun VyroxApp(
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
     box64Installed: Boolean,
+    winePrefixInfo: WinePrefixInfo?,
     isImporting: Boolean,
     statusMessage: String?,
     isDesktopMode: Boolean,
@@ -135,6 +137,7 @@ fun VyroxApp(
                     hostCapabilities = hostCapabilities,
                     prootBinaryAvailable = prootBinaryAvailable,
                     box64Installed = box64Installed,
+                    winePrefixInfo = winePrefixInfo,
                     isImporting = isImporting,
                     statusMessage = statusMessage,
                     capsuleName = capsuleName,
@@ -301,6 +304,7 @@ fun VyroxApp(
                         onTestRootFs = onTestRootFs,
                         onBuildBox64 = onBuildBox64,
                         box64Installed = box64Installed,
+                        winePrefixInfo = winePrefixInfo,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -740,6 +744,7 @@ internal fun CapsuleExplorerCard(
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
     box64Installed: Boolean,
+    winePrefixInfo: WinePrefixInfo?,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -830,6 +835,20 @@ internal fun CapsuleExplorerCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text("Linux RootFS", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Wine prefix: " + (winePrefixInfo?.let { "verified Wine ${it.wineVersion} (${it.architecture})" }
+                            ?: "no verified prefix in this Capsule's ARM64 RootFS"),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    winePrefixInfo?.let { prefix ->
+                        Text(
+                            "C: ${prefix.guestDriveCPath}  •  D: ${prefix.guestDriveDPath}",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     Text(
                         "Separate Linux filesystems. The shell test executes uname and id inside the imported ARM64 RootFS; it does not run Windows programs.",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
