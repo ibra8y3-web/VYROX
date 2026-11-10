@@ -3,12 +3,17 @@ package com.vyrox.runtime.core.capsule
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
+import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import java.nio.file.Files
 import java.util.ArrayDeque
 import java.util.Locale
 import java.util.Properties
 import java.util.UUID
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
 
 data class CapsuleInfo(
     val id: String,
@@ -21,6 +26,19 @@ data class CapsuleFileEntry(
     val relativePath: String,
     val isDirectory: Boolean,
     val sizeBytes: Long
+)
+
+data class CapsuleSnapshotInfo(
+    val fileName: String,
+    val createdAtEpochMillis: Long,
+    val sizeBytes: Long,
+    val sha256: String
+)
+
+data class CapsuleSpaceUsage(
+    val totalBytes: Long,
+    val fileCount: Int,
+    val directoryCount: Int
 )
 
 /**
@@ -584,12 +602,469 @@ class CapsuleStorage(private val capsuleRoot: File) {
     }
 
     private data class ZipExtractionBudget(var entries: Int = 0, var totalBytes: Long = 0L)
+    private data class ArchiveBudget(var entries: Int = 0, var bytes: Long = 0L)
 
     private data class CopyBudget(
         var entries: Int = 0,
         var totalBytes: Long = 0L
     )
 
+
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun renameCapsule(id: String, rawName: String): CapsuleInfo {
+        val safeName = CapsulePolicy.normalizeName(rawName)
+        val directory = requireCapsuleDirectory(id)
+        val metadataFile = File(directory, CAPSULE_METADATA_FILE)
+        val metadata = Properties()
+        metadataFile.inputStream().buffered().use { metadata.load(it) }
+        if (metadata.getProperty("id") != id) {
+            throw IOException("Capsule metadata does not match its directory.")
+        }
+        metadata.setProperty("name", safeName)
+
+        val temporary = File(directory, ".capsule-rename-" + UUID.randomUUID() + ".tmp")
+        val backup = File(directory, ".capsule-metadata-" + UUID.randomUUID() + ".bak")
+        try {
+            temporary.outputStream().buffered().use { metadata.store(it, "VYROX Capsule metadata") }
+            if (!metadataFile.renameTo(backup)) {
+                throw IOException("Could not stage Capsule metadata for rename.")
+            }
+            if (!temporary.renameTo(metadataFile)) {
+                backup.renameTo(metadataFile)
+                throw IOException("Could not finalize the Capsule rename.")
+            }
+            backup.delete()
+            return readCapsule(directory, capsuleRoot.canonicalFile)
+                ?: throw IOException("Renamed Capsule metadata could not be reloaded.")
+        } finally {
+            temporary.delete()
+            if (backup.exists() && !metadataFile.exists()) backup.renameTo(metadataFile)
+        }
+    }
+
+    /**
+     * Clone the file-backed C: and D: contents into a new Capsule.
+     * This copies files only; it does not clone a running Windows prefix.
+     */
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun cloneCapsule(id: String, rawName: String): CapsuleInfo {
+        val source = requireCapsuleDirectory(id)
+        val clone = createCapsule(rawName)
+        try {
+            val budget = CopyBudget()
+            val destination = requireCapsuleDirectory(clone.id)
+            for (driveName in listOf("drive_c", "drive_d")) {
+                val sourceDrive = File(source, driveName).canonicalFile
+                val destinationDrive = File(destination, driveName).canonicalFile
+                if (
+                    sourceDrive.parentFile != source ||
+                    destinationDrive.parentFile != destination ||
+                    !sourceDrive.isDirectory ||
+                    !destinationDrive.isDirectory
+                ) {
+                    throw IOException("Capsule drive layout is incomplete.")
+                }
+                sourceDrive.listFiles().orEmpty().forEach { child ->
+                    copyNode(child, File(destinationDrive, child.name), budget)
+                }
+            }
+            return clone
+        } catch (exception: Exception) {
+            deleteCapsule(clone.id)
+            throw exception
+        }
+    }
+
+    /**
+     * Write a portable, versioned ZIP backup of a Capsule to the caller's stream.
+     * The caller owns and closes the supplied stream.
+     */
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun exportCapsuleBackup(id: String, output: OutputStream) {
+        val directory = requireCapsuleDirectory(id)
+        val capsule = readCapsule(directory, capsuleRoot.canonicalFile)
+            ?: throw IOException("Capsule metadata is invalid.")
+        val zip = ZipOutputStream(output)
+        val manifest = Properties().apply {
+            setProperty("format", CAPSULE_BACKUP_FORMAT)
+            setProperty("name", capsule.name)
+            setProperty("createdAtEpochMillis", capsule.createdAtEpochMillis.toString())
+        }
+        val manifestBytes = ByteArrayOutputStream().also {
+            manifest.store(it, "VYROX Capsule backup")
+        }.toByteArray()
+        zip.putNextEntry(ZipEntry(CAPSULE_BACKUP_MANIFEST))
+        zip.write(manifestBytes)
+        zip.closeEntry()
+
+        val budget = ArchiveBudget()
+        for (driveName in listOf("drive_c", "drive_d")) {
+            val drive = File(directory, driveName).canonicalFile
+            if (drive.parentFile != directory || !drive.isDirectory || Files.isSymbolicLink(drive.toPath())) {
+                throw IOException("Capsule drive layout is missing or unsafe: $driveName")
+            }
+            writeBackupNode(drive, driveName, zip, budget)
+        }
+        zip.finish()
+        zip.flush()
+    }
+
+    /**
+     * Import a VYROX backup into a newly-created Capsule with a fresh identifier.
+     */
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun importCapsuleBackup(rawName: String, input: InputStream): CapsuleInfo {
+        val safeName = CapsulePolicy.normalizeName(rawName)
+        val staging = createStagingDirectory("backup-import")
+        var created: CapsuleInfo? = null
+        try {
+            extractCapsuleBackup(input, staging)
+            val importedC = File(staging, "drive_c")
+            val importedD = File(staging, "drive_d")
+            if (!importedC.isDirectory || !importedD.isDirectory) {
+                throw IOException("Backup does not contain both Capsule drives.")
+            }
+
+            val capsule = createCapsule(safeName)
+            created = capsule
+            val destination = requireCapsuleDirectory(capsule.id)
+            for (driveName in listOf("drive_c", "drive_d")) {
+                val oldDrive = File(destination, driveName)
+                val stagedDrive = File(staging, driveName)
+                if (!oldDrive.deleteRecursively() || !stagedDrive.renameTo(oldDrive)) {
+                    throw IOException("Could not restore Capsule drive: $driveName")
+                }
+            }
+            return capsule
+        } catch (exception: Exception) {
+            created?.let { deleteCapsule(it.id) }
+            throw exception
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun createSnapshot(id: String): CapsuleSnapshotInfo {
+        val directory = requireCapsuleDirectory(id)
+        val snapshots = File(directory, CAPSULE_SNAPSHOTS_DIRECTORY)
+        if (!snapshots.exists() && !snapshots.mkdir()) {
+            throw IOException("Could not create the Capsule snapshots directory.")
+        }
+        if (!snapshots.isDirectory || Files.isSymbolicLink(snapshots.toPath())) {
+            throw SecurityException("Capsule snapshots path is not a private directory.")
+        }
+        val fileName = "snapshot-" + System.currentTimeMillis() + "-" +
+            UUID.randomUUID().toString().take(8) + CAPSULE_SNAPSHOT_EXTENSION
+        val snapshot = File(snapshots, fileName).canonicalFile
+        if (snapshot.parentFile != snapshots.canonicalFile) {
+            throw SecurityException("Snapshot path escaped the Capsule.")
+        }
+        try {
+            snapshot.outputStream().buffered().use { exportCapsuleBackup(id, it) }
+            return snapshotInfo(snapshot)
+        } catch (exception: Exception) {
+            snapshot.delete()
+            throw exception
+        }
+    }
+
+    fun listSnapshots(id: String): List<CapsuleSnapshotInfo> {
+        val directory = requireCapsuleDirectory(id)
+        val snapshots = File(directory, CAPSULE_SNAPSHOTS_DIRECTORY).canonicalFile
+        if (!snapshots.isDirectory || snapshots.parentFile != directory) return emptyList()
+        return snapshots.listFiles().orEmpty()
+            .filter {
+                it.isFile &&
+                    !Files.isSymbolicLink(it.toPath()) &&
+                    SNAPSHOT_FILE_PATTERN.matches(it.name) &&
+                    it.canonicalFile.parentFile == snapshots
+            }
+            .mapNotNull { runCatching { snapshotInfo(it) }.getOrNull() }
+            .sortedByDescending { it.createdAtEpochMillis }
+    }
+
+    /**
+     * Restore a snapshot in-place. Both drives are staged before replacement;
+     * previous drives are retained if either replacement fails.
+     */
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun restoreSnapshot(id: String, fileName: String) {
+        val directory = requireCapsuleDirectory(id)
+        require(SNAPSHOT_FILE_PATTERN.matches(fileName)) { "Snapshot name is invalid." }
+        val snapshots = File(directory, CAPSULE_SNAPSHOTS_DIRECTORY).canonicalFile
+        val snapshot = File(snapshots, fileName).canonicalFile
+        if (
+            snapshot.parentFile != snapshots ||
+            !snapshot.isFile ||
+            Files.isSymbolicLink(snapshot.toPath())
+        ) {
+            throw IOException("Snapshot file was not found inside this Capsule.")
+        }
+
+        val staging = createStagingDirectory("snapshot-restore")
+        val token = UUID.randomUUID().toString()
+        val oldC = File(directory, ".old-drive-c-$token")
+        val oldD = File(directory, ".old-drive-d-$token")
+        var movedOldC = false
+        var movedOldD = false
+        var installedC = false
+        var installedD = false
+        var succeeded = false
+        try {
+            snapshot.inputStream().buffered().use { extractCapsuleBackup(it, staging) }
+            val stagedC = File(staging, "drive_c")
+            val stagedD = File(staging, "drive_d")
+            if (!stagedC.isDirectory || !stagedD.isDirectory) {
+                throw IOException("Snapshot does not contain both Capsule drives.")
+            }
+
+            val currentC = File(directory, "drive_c")
+            val currentD = File(directory, "drive_d")
+            movedOldC = currentC.renameTo(oldC)
+            if (!movedOldC) throw IOException("Could not stage the current C: drive.")
+            movedOldD = currentD.renameTo(oldD)
+            if (!movedOldD) throw IOException("Could not stage the current D: drive.")
+
+            installedC = stagedC.renameTo(currentC)
+            if (!installedC) throw IOException("Could not restore the C: drive.")
+            installedD = stagedD.renameTo(currentD)
+            if (!installedD) throw IOException("Could not restore the D: drive.")
+            succeeded = true
+        } catch (exception: Exception) {
+            val currentC = File(directory, "drive_c")
+            val currentD = File(directory, "drive_d")
+            if (installedC) currentC.deleteRecursively()
+            if (installedD) currentD.deleteRecursively()
+            if (movedOldC && oldC.exists() && !oldC.renameTo(currentC)) {
+                throw IOException("Restore failed and the previous C: drive remains at " + oldC.name, exception)
+            }
+            if (movedOldD && oldD.exists() && !oldD.renameTo(currentD)) {
+                throw IOException("Restore failed and the previous D: drive remains at " + oldD.name, exception)
+            }
+            throw exception
+        } finally {
+            staging.deleteRecursively()
+            if (succeeded) {
+                oldC.deleteRecursively()
+                oldD.deleteRecursively()
+            }
+        }
+    }
+
+    fun deleteSnapshot(id: String, fileName: String): Boolean {
+        val directory = requireCapsuleDirectory(id)
+        if (!SNAPSHOT_FILE_PATTERN.matches(fileName)) return false
+        val snapshots = File(directory, CAPSULE_SNAPSHOTS_DIRECTORY).canonicalFile
+        if (!snapshots.isDirectory || snapshots.parentFile != directory) return false
+        val snapshot = File(snapshots, fileName).canonicalFile
+        return snapshot.parentFile == snapshots &&
+            snapshot.isFile &&
+            !Files.isSymbolicLink(snapshot.toPath()) &&
+            snapshot.delete()
+    }
+
+    fun calculateSpaceUsage(id: String): CapsuleSpaceUsage {
+        val directory = requireCapsuleDirectory(id)
+        var bytes = 0L
+        var files = 0
+        var folders = 0
+        val pending = ArrayDeque<File>()
+        pending.add(directory)
+        while (pending.isNotEmpty()) {
+            val current = pending.removeFirst()
+            if (Files.isSymbolicLink(current.toPath())) continue
+            if (current.isDirectory) {
+                folders += 1
+                current.listFiles().orEmpty().forEach(pending::addLast)
+            } else if (current.isFile) {
+                files += 1
+                bytes += current.length()
+            }
+        }
+        return CapsuleSpaceUsage(bytes, files, folders)
+    }
+
+    private fun requireCapsuleDirectory(id: String): File {
+        if (!isValidId(id) || !capsuleRoot.isDirectory) {
+            throw IllegalArgumentException("Capsule identifier is invalid.")
+        }
+        val root = capsuleRoot.canonicalFile
+        val directory = File(root, id).canonicalFile
+        if (
+            directory.parentFile != root ||
+            !directory.isDirectory ||
+            Files.isSymbolicLink(directory.toPath()) ||
+            readCapsule(directory, root) == null
+        ) {
+            throw IOException("Capsule workspace was not found or its metadata is invalid.")
+        }
+        return directory
+    }
+
+    private fun createStagingDirectory(prefix: String): File {
+        if (!capsuleRoot.exists() && !capsuleRoot.mkdirs()) {
+            throw IOException("Could not create Capsule storage root.")
+        }
+        val root = capsuleRoot.canonicalFile
+        if (!root.isDirectory || Files.isSymbolicLink(capsuleRoot.toPath())) {
+            throw SecurityException("Capsule storage root is not a safe directory.")
+        }
+        val staging = File(root, ".$prefix-" + UUID.randomUUID()).canonicalFile
+        if (staging.parentFile != root || !staging.mkdir()) {
+            throw IOException("Could not create a private Capsule staging directory.")
+        }
+        return staging
+    }
+
+    private fun extractCapsuleBackup(input: InputStream, staging: File) {
+        val seen = HashSet<String>()
+        val budget = ArchiveBudget()
+        var manifestSeen = false
+        ZipInputStream(input.buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                budget.entries += 1
+                if (budget.entries > MAX_ARCHIVE_ENTRIES) {
+                    throw IOException("Capsule backup contains too many entries.")
+                }
+                val relativePath = normalizeZipEntryPath(entry.name)
+                if (relativePath == CAPSULE_BACKUP_MANIFEST) {
+                    if (entry.isDirectory || manifestSeen) {
+                        throw IOException("Capsule backup manifest is invalid.")
+                    }
+                    val manifestText = zip.readBytesLimited(MAX_BACKUP_MANIFEST_BYTES)
+                    val properties = Properties()
+                    properties.load(manifestText.inputStream())
+                    if (properties.getProperty("format") != CAPSULE_BACKUP_FORMAT) {
+                        throw IOException("Unsupported VYROX Capsule backup format.")
+                    }
+                    manifestSeen = true
+                    continue
+                }
+
+                val segments = relativePath.split('/')
+                if (segments.firstOrNull() !in setOf("drive_c", "drive_d")) {
+                    throw IOException("Backup contains data outside the Capsule drives.")
+                }
+                val key = relativePath.lowercase(Locale.ROOT)
+                if (!seen.add(key)) throw IOException("Backup contains duplicate Windows paths.")
+
+                val target = File(staging, relativePath).canonicalFile
+                if (!isWithinRoot(staging, target) || target == staging.canonicalFile) {
+                    throw IOException("Backup entry escaped its staging directory.")
+                }
+                if (entry.isDirectory) {
+                    if (!target.exists() && !target.mkdirs()) {
+                        throw IOException("Could not create a backup folder.")
+                    }
+                    if (!target.isDirectory) throw IOException("Backup path conflicts with a file.")
+                } else {
+                    val parent = target.parentFile ?: throw IOException("Backup file has no parent.")
+                    if (!isWithinRoot(staging, parent)) throw IOException("Backup parent escaped staging.")
+                    if (!parent.exists() && !parent.mkdirs()) throw IOException("Could not create a backup parent.")
+                    if (!parent.isDirectory || target.exists()) {
+                        throw IOException("Backup contains a duplicate or conflicting path.")
+                    }
+                    target.outputStream().buffered().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var fileBytes = 0L
+                        while (true) {
+                            val count = zip.read(buffer)
+                            if (count < 0) break
+                            if (count == 0) continue
+                            fileBytes += count
+                            budget.bytes += count
+                            if (fileBytes > MAX_ARCHIVE_ENTRY_BYTES || budget.bytes > MAX_ARCHIVE_EXPANDED_BYTES) {
+                                throw IOException("Backup expands beyond the configured size limit.")
+                            }
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+            }
+        }
+        if (!manifestSeen || budget.entries == 0 ||
+            !File(staging, "drive_c").isDirectory || !File(staging, "drive_d").isDirectory
+        ) {
+            throw IOException("Capsule backup is empty, invalid, or incomplete.")
+        }
+    }
+
+    private fun writeBackupNode(source: File, archivePath: String, zip: ZipOutputStream, budget: ArchiveBudget) {
+        if (Files.isSymbolicLink(source.toPath())) {
+            throw IOException("Capsule backup cannot include symbolic links.")
+        }
+        budget.entries += 1
+        if (budget.entries > MAX_ARCHIVE_ENTRIES) throw IOException("Capsule contains too many backup entries.")
+        if (source.isDirectory) {
+            zip.putNextEntry(ZipEntry(archivePath.trimEnd('/') + "/"))
+            zip.closeEntry()
+            source.listFiles()
+                ?.sortedBy { it.name.lowercase(Locale.ROOT) }
+                ?.forEach { child -> writeBackupNode(child, "$archivePath/" + child.name, zip, budget) }
+                ?: throw IOException("Could not read a Capsule folder during backup.")
+        } else if (source.isFile) {
+            budget.bytes += source.length()
+            if (budget.bytes > MAX_ARCHIVE_EXPANDED_BYTES) {
+                throw IOException("Capsule backup exceeds the configured size limit.")
+            }
+            zip.putNextEntry(ZipEntry(archivePath))
+            source.inputStream().buffered().use { it.copyTo(zip) }
+            zip.closeEntry()
+        } else {
+            throw IOException("Capsule contains an unsupported filesystem entry.")
+        }
+    }
+
+    private fun snapshotInfo(file: File): CapsuleSnapshotInfo {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count > 0) digest.update(buffer, 0, count)
+            }
+        }
+        val manifest = readBackupManifest(file)
+        return CapsuleSnapshotInfo(
+            fileName = file.name,
+            createdAtEpochMillis = manifest.getProperty("createdAtEpochMillis")?.toLongOrNull()
+                ?: file.lastModified(),
+            sizeBytes = file.length(),
+            sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+        )
+    }
+
+    private fun readBackupManifest(file: File): Properties {
+        val properties = Properties()
+        ZipInputStream(file.inputStream().buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == CAPSULE_BACKUP_MANIFEST) {
+                    properties.load(zip.readBytesLimited(MAX_BACKUP_MANIFEST_BYTES).inputStream())
+                    break
+                }
+            }
+        }
+        return properties
+    }
+
+    private fun InputStream.readBytesLimited(maximum: Int): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0
+        while (true) {
+            val count = read(buffer)
+            if (count < 0) break
+            if (count == 0) continue
+            total += count
+            if (total > maximum) throw IOException("Capsule backup manifest is too large.")
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
+    }
 
     fun deleteCapsule(id: String): Boolean {
         if (!isValidId(id) || !capsuleRoot.isDirectory) return false
@@ -653,7 +1128,7 @@ class CapsuleStorage(private val capsuleRoot: File) {
         val canonicalDirectory = directory.canonicalFile
         if (canonicalDirectory.parentFile != canonicalRoot) return null
 
-        val metadataFile = File(canonicalDirectory, "capsule.properties")
+        val metadataFile = File(canonicalDirectory, CAPSULE_METADATA_FILE)
         if (!metadataFile.isFile) return null
 
         val metadata = Properties()
@@ -682,7 +1157,14 @@ class CapsuleStorage(private val capsuleRoot: File) {
         const val MAX_ARCHIVE_PATH_LENGTH: Int = 4_096
         const val MAX_ARCHIVE_ENTRY_BYTES: Long = 2L * 1024L * 1024L * 1024L
         const val MAX_ARCHIVE_EXPANDED_BYTES: Long = 2L * 1024L * 1024L * 1024L
+        const val CAPSULE_METADATA_FILE = "capsule.properties"
+        const val CAPSULE_BACKUP_FORMAT = "VYROX-CAPSULE-1"
+        const val CAPSULE_BACKUP_MANIFEST = "vyrox-backup.properties"
+        const val CAPSULE_SNAPSHOTS_DIRECTORY = "snapshots"
+        const val CAPSULE_SNAPSHOT_EXTENSION = ".vxsnapshot"
+        const val MAX_BACKUP_MANIFEST_BYTES = 16 * 1024
         const val MAX_SEARCH_RESULTS: Int = 500
+        val SNAPSHOT_FILE_PATTERN = Regex("snapshot-[0-9]{10,17}-[0-9a-f]{8}\.vxsnapshot")
         const val MAX_SEARCH_VISITED: Int = 20_000
 
         val INITIAL_DIRECTORY_PATHS = listOf(

@@ -8,6 +8,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -282,6 +283,110 @@ class CapsuleStorageTest {
             }
         }
         return output.toByteArray()
+    }
+
+
+    @Test
+    fun renamesAndClonesCapsuleWithoutSharingFiles() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val original = storage.createCapsule("Original")
+        val originalD = requireNotNull(storage.getDriveRoot(original.id, 'D'))
+        File(originalD, "Documents/project.txt").writeText("original data")
+
+        val renamed = storage.renameCapsule(original.id, "Renamed Workspace")
+        assertEquals(original.id, renamed.id)
+        assertEquals("Renamed Workspace", renamed.name)
+
+        val clone = storage.cloneCapsule(original.id, "Cloned Workspace")
+        assertFalse(original.id == clone.id)
+        assertEquals("original data", File(requireNotNull(storage.getDriveRoot(clone.id, 'D')), "Documents/project.txt").readText())
+
+        File(requireNotNull(storage.getDriveRoot(clone.id, 'D')), "Documents/project.txt").writeText("clone data")
+        assertEquals("original data", File(originalD, "Documents/project.txt").readText())
+        assertEquals(2, storage.listCapsules().size)
+    }
+
+    @Test
+    fun exportsAndImportsCapsuleBackupWithFreshIdentity() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val original = storage.createCapsule("Backup Source")
+        val cDrive = requireNotNull(storage.getDriveRoot(original.id, 'C'))
+        val dDrive = requireNotNull(storage.getDriveRoot(original.id, 'D'))
+        File(cDrive, "Program Files/app.exe").writeText("PE data")
+        File(dDrive, "Documents/readme.txt").writeText("backup content")
+
+        val backup = ByteArrayOutputStream()
+        storage.exportCapsuleBackup(original.id, backup)
+
+        val restored = storage.importCapsuleBackup(
+            "Restored Capsule",
+            ByteArrayInputStream(backup.toByteArray())
+        )
+
+        assertFalse(original.id == restored.id)
+        assertEquals("Restored Capsule", restored.name)
+        assertEquals("PE data", File(requireNotNull(storage.getDriveRoot(restored.id, 'C')), "Program Files/app.exe").readText())
+        assertEquals("backup content", File(requireNotNull(storage.getDriveRoot(restored.id, 'D')), "Documents/readme.txt").readText())
+    }
+
+    @Test
+    fun snapshotsCanBeListedRestoredAndDeleted() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Snapshot Workspace")
+        val dDrive = requireNotNull(storage.getDriveRoot(capsule.id, 'D'))
+        val stateFile = File(dDrive, "Documents/state.txt")
+        stateFile.writeText("before snapshot")
+
+        val snapshot = storage.createSnapshot(capsule.id)
+        assertTrue(snapshot.sha256.matches(Regex("[0-9a-f]{64}")))
+        assertEquals(1, storage.listSnapshots(capsule.id).size)
+
+        stateFile.writeText("after snapshot")
+        storage.restoreSnapshot(capsule.id, snapshot.fileName)
+        assertEquals("before snapshot", stateFile.readText())
+
+        assertTrue(storage.deleteSnapshot(capsule.id, snapshot.fileName))
+        assertTrue(storage.listSnapshots(capsule.id).isEmpty())
+    }
+
+    @Test
+    fun calculatesCapsuleStorageUsageFromActualFiles() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Usage")
+        val dDrive = requireNotNull(storage.getDriveRoot(capsule.id, 'D'))
+        File(dDrive, "Documents/one.txt").writeText("12345")
+        File(dDrive, "Documents/two.txt").writeText("67890")
+
+        val usage = storage.calculateSpaceUsage(capsule.id)
+
+        assertEquals(10L, usage.totalBytes)
+        assertEquals(2, usage.fileCount)
+        assertTrue(usage.directoryCount > 1)
+    }
+
+    @Test
+    fun rejectsBackupArchivePathTraversal() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            val manifest = java.util.Properties().apply {
+                setProperty("format", "VYROX-CAPSULE-1")
+            }
+            zip.putNextEntry(ZipEntry("vyrox-backup.properties"))
+            manifest.store(zip, "test")
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("drive_c/../escape.txt"))
+            zip.write("bad".toByteArray())
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("drive_d/"))
+            zip.closeEntry()
+        }
+
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            storage.importCapsuleBackup("Unsafe restore", ByteArrayInputStream(output.toByteArray()))
+        }
+        assertFalse(File(temporaryFolder.root, "escape.txt").exists())
+        assertTrue(storage.listCapsules().isEmpty())
     }
 
     @Test

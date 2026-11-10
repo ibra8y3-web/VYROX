@@ -30,7 +30,7 @@
 | Android application | Kotlin, Jetpack Compose, Android document picker |
 | Desktop interface | Landscape-first shell, phone-admin orientation switch, Start menu, taskbar, multiple movable/resizable windows |
 | Installer library | Imports EXE/MSI/ZIP files into private app storage; validates PE/COFF, MSI compound-file and ZIP directory headers; securely extracts ZIP files only inside a selected Capsule; does not execute them |
-| Capsule workspaces | Create/list/delete app-private workspaces with independent C:/D: folder trees and metadata |
+| Capsule workspaces | Create/list/delete/rename/clone app-private workspaces with independent C:/D: folder trees, portable ZIP backups, checksummed snapshots, restore and storage accounting |
 | File manager | Browse, create, import, copy, move, rename, search, delete and safely extract ZIP archives within Capsule storage |
 | Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
 | Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
@@ -38,6 +38,8 @@
 | Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging preflight |
 
 **Source implementation is not the same as verified runtime behavior.** The CI badge reports the latest GitHub Actions result. Native execution and Windows compatibility still require successful Android builds and physical-device testing.
+
+Capsule backup and snapshot operations are file-level archives. They preserve the Capsule's current C:/D: data folders and metadata needed to identify a backup format; they do not capture a live process, running Windows registry, or VM memory image. Restoring a snapshot replaces the file-backed C:/D: trees after staging and validation.
 
 ## What is not implemented
 
