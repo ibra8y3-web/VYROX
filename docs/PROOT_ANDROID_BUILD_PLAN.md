@@ -16,10 +16,10 @@ The initial Android source candidate is pinned in
 - Termux PRoot `v5.1.107.102`, commit
   `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, Termux package label GPL-2.0.
 - `libandroid-shmem` `0.7`, BSD-3-Clause.
-- `libtalloc` `2.5.0`: its shared library source is identified as
-  LGPL-3.0-or-later, while the Termux package recipe labels the package GPL-3.0.
-  Preserve both declarations pending review of the exact distributed files
-  and notices.
+- `libtalloc` `2.4.2`: the Termux package recipe builds a static archive.
+  The package recipe labels the package GPL-3.0, while the library source
+  includes LGPL terms. Preserve the actual upstream notice files and review
+  the combined distribution before release.
 
 The Termux package recipe declares PRoot dependencies on
 `libandroid-shmem` and `libtalloc`, enables the Android shared-memory
@@ -74,20 +74,22 @@ The reference source set is now recorded in
   `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, archive SHA-256
   `30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852`,
   GPL-2.0.
-- `libtalloc` `2.5.0`, SHA-256
-  `912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007`.
-  The Termux recipe labels its package GPL-3.0, while the talloc library source
-  headers identify LGPL-3.0-or-later. The exact source and notices need a final
-  review before redistribution.
+- `libtalloc` `2.4.2`, SHA-256
+  `85ecf9e465e20f98f9950a52e9a411e14320bc555fa257d87697b7e7a9b1d8a6`.
+  Its PIC static archive is linked into PRoot rather than shipped separately.
+  The Termux recipe labels the package GPL-3.0 while talloc carries LGPL terms;
+  retain both upstream notice files and review before release.
 - `libandroid-shmem` `0.7`, source commit
   `7f0bd7e25dbdd146265aff7c6a890029e374622d`, SHA-256
   `1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867`,
   BSD-3-Clause.
 
-These are source pins only. No PRoot binary is included in the APK. The Termux
-build recipe points its unbundled loader at its own package prefix; VYROX must
-not reuse that absolute path. The first VYROX build should retain the embedded
-loader or implement a relocatable loader directory and test it.
+These are source pins, not committed binary blobs. CI verifies each archive
+digest, builds PIC static archives for talloc and libandroid-shmem, and links
+them into the PRoot PIE. It packages only `libproot.so` and the separate static
+`libproot-loader.so` under `app/src/main/jniLibs/arm64-v8a/`. The supervisor
+sets `PROOT_LOADER` to the loader in `applicationInfo.nativeLibraryDir`;
+there is no custom host `LD_LIBRARY_PATH` to leak into the guest environment.
 
 ## Required next steps
 
@@ -95,15 +97,13 @@ loader or implement a relocatable loader directory and test it.
    patches and both dependencies, with the Android NDK/Bionic toolchain.
 2. Review the exact source files, package labels, notices, and distribution
    obligations for PRoot, libtalloc, and libandroid-shmem.
-3. Produce an ARM64 PIE executable plus the exact dynamic dependencies
-   `libtalloc.so.2` and `libandroid-shmem.so`. Package all three as regular
-   ELF files under `app/src/main/jniLibs/arm64-v8a/` (the executable filename
-   is `libproot.so`) and keep `useLegacyPackaging` enabled so the payload is
-   extracted into `applicationInfo.nativeLibraryDir`. Preserve the SONAME
-   filenames expected by `DT_NEEDED`; do not rely on symlinks in APK entries.
-4. Verify the extracted files are 64-bit little-endian AArch64 ELF images,
-   the PRoot image is PIE, and the dynamic dependencies resolve when the
-   supervisor sets a trusted host `LD_LIBRARY_PATH` to `nativeLibraryDir`.
+3. Produce an ARM64 PIE executable and a separate static AArch64 loader.
+   Link talloc and libandroid-shmem statically; package only the two executable
+   ELF files under `app/src/main/jniLibs/arm64-v8a/` as `libproot.so` and
+   `libproot-loader.so`. Keep `useLegacyPackaging` enabled so Android
+   extracts them into `applicationInfo.nativeLibraryDir`.
+4. Verify PRoot has no `DT_NEEDED` entry for talloc or libandroid-shmem and
+   the static loader has no `PT_INTERP`. Keep `PROOT_LOADER` host-controlled.
 5. Test `execve()` and PRoot startup on physical Android 12+ devices. Capture
    device model, Android build, target SDK, ABI, exit status, and logs.
 6. Test PRoot `ptrace`, SELinux behavior, bind mounts, signals, process exit,

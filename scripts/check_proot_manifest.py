@@ -13,7 +13,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED = {
     "proot": ("5.1.107.102", "GPL-2.0"),
-    "libtalloc": ("2.5.0", "LGPL-3.0-or-later"),
+    "libtalloc": ("2.4.2", "LGPL-3.0-or-later"),
     "libandroid-shmem": ("0.7", "BSD-3-Clause"),
 }
 

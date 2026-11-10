@@ -1,39 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NDK_VERSION="27.2.12479018"
 API_LEVEL="26"
 PROOT_VERSION="5.1.107.102"
-TALLOC_VERSION="2.5.0"
+TALLOC_VERSION="2.4.2"
 SHMEM_VERSION="0.7"
 
 PROOT_SHA256="30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852"
-TALLOC_SHA256="912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007"
+TALLOC_SHA256="85ecf9e465e20f98f9950a52e9a411e14320bc555fa257d87697b7e7a9b1d8a6"
 SHMEM_SHA256="1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867"
 
-SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+SDK_ROOT="$ANDROID_SDK_ROOT"
+if [[ -z "$SDK_ROOT" ]]; then
+  SDK_ROOT="$ANDROID_HOME"
+fi
 if [[ -z "$SDK_ROOT" ]]; then
   echo "ANDROID_SDK_ROOT or ANDROID_HOME must point to an installed Android SDK." >&2
   exit 2
 fi
 
-NDK_ROOT="${ANDROID_NDK_HOME:-$SDK_ROOT/ndk/$NDK_VERSION}"
+NDK_ROOT="$SDK_ROOT/ndk/$NDK_VERSION"
+if [[ -n "$ANDROID_NDK_HOME" ]]; then
+  NDK_ROOT="$ANDROID_NDK_HOME"
+fi
 TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
-if [[ ! -x "$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang" ]]; then
+if [[ ! -x "$TOOLCHAIN/bin/aarch64-linux-android$API_LEVEL-clang" ]]; then
   echo "Android NDK $NDK_VERSION with the Linux x86_64 host toolchain was not found at $NDK_ROOT." >&2
   exit 2
 fi
 
-CC="$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang"
+CC="$TOOLCHAIN/bin/aarch64-linux-android$API_LEVEL-clang"
 AR="$TOOLCHAIN/bin/llvm-ar"
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 READELF="$TOOLCHAIN/bin/llvm-readelf"
 OBJCOPY="$TOOLCHAIN/bin/llvm-objcopy"
 OBJDUMP="$TOOLCHAIN/bin/llvm-objdump"
+LD="$TOOLCHAIN/bin/ld.lld"
 
-for tool in "$AR" "$RANLIB" "$STRIP" "$READELF" "$OBJCOPY" "$OBJDUMP" curl unzip tar sha256sum make; do
+for tool in "$CC" "$AR" "$RANLIB" "$STRIP" "$READELF" "$OBJCOPY" "$OBJDUMP" "$LD" curl unzip tar sha256sum make patch python3; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "Required build tool is missing: $tool" >&2
     exit 2
@@ -46,6 +53,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 PREFIX="$WORK/prefix"
 mkdir -p "$PREFIX/include" "$PREFIX/lib" "$OUT" "$LICENSE_OUT"
+rm -f "$OUT/libproot.so" "$OUT/libproot-loader.so" "$OUT/libtalloc.so.2" "$OUT/libandroid-shmem.so"
 
 download_checked() {
   local url="$1"
@@ -88,14 +96,18 @@ for source_dir in "$PROOT_SRC" "$TALLOC_SRC" "$SHMEM_SRC"; do
   }
 done
 
-JOBS="${VYROX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
-export CC AR RANLIB STRIP
-export CFLAGS="-O2 -fPIC"
-export CPPFLAGS="-D_FILE_OFFSET_BITS=64"
-export LDFLAGS="-Wl,-z,noexecstack"
+JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 
-echo "Building libtalloc $TALLOC_VERSION for arm64-v8a"
-cat > "$TALLOC_SRC/cross-answers.txt" <<'ANSWERS'
+echo "Building static libtalloc $TALLOC_VERSION for arm64-v8a"
+TALLOC_WORK="$WORK/talloc-build"
+mkdir -p "$TALLOC_WORK"
+cp -a "$TALLOC_SRC/." "$TALLOC_WORK/"
+mkdir -p "$TALLOC_WORK/tool-shims"
+printf '#!/bin/sh\nexit 1\n' > "$TALLOC_WORK/tool-shims/pkg-config"
+chmod 0755 "$TALLOC_WORK/tool-shims/pkg-config"
+ln -s "$(command -v python3)" "$TALLOC_WORK/tool-shims/python"
+
+cat > "$TALLOC_WORK/cross-answers.txt" <<'ANSWERS'
 Checking uname sysname type: "Linux"
 Checking uname machine type: "dontcare"
 Checking uname release type: "dontcare"
@@ -120,76 +132,72 @@ Checking for working strptime: OK
 Checking for HAVE_SHARED_MMAP: OK
 Checking for HAVE_MREMAP: OK
 Checking for HAVE_INCOHERENT_MMAP: OK
+Checking getconf LFS_CFLAGS: OK
+Checking getconf large file support flags work: OK
 ANSWERS
 
 (
-  cd "$TALLOC_SRC"
-  configured=0
-  for attempt in 1 2 3 4 5 6 7 8; do
-    configure_log="$WORK/talloc-configure-$attempt.log"
-    if ./configure \
-      --prefix="$PREFIX" \
-      --disable-rpath \
-      --disable-python \
-      --cross-compile \
-      --cross-answers=cross-answers.txt >"$configure_log" 2>&1; then
-      cat "$configure_log"
-      configured=1
-      break
-    fi
+  cd "$TALLOC_WORK"
+  export CC AR RANLIB STRIP OBJCOPY OBJDUMP LD
+  export CFLAGS="-O2 -fPIC"
+  export CPPFLAGS="-D_FILE_OFFSET_BITS=64"
+  export LDFLAGS=""
+  export PATH="$TALLOC_WORK/tool-shims:$PATH"
 
-    cat "$configure_log"
-    if ! grep -Fq "Cross answers file cross-answers.txt is incomplete" "$configure_log"; then
-      echo "talloc configure failed for a reason other than missing cross answers." >&2
-      echo "Cross-answer file at failure:" >&2
-      cat cross-answers.txt >&2
-      exit 1
-    fi
-    echo "talloc added unanswered cross checks on pass $attempt; retrying with the generated answers."
-  done
-  if [[ "$configured" -ne 1 ]]; then
-    echo "talloc cross-answer configuration did not converge after 8 passes." >&2
-    cat cross-answers.txt >&2
-    exit 1
-  fi
+  ./configure \
+    --prefix="$PREFIX" \
+    --disable-rpath \
+    --disable-python \
+    --cross-compile \
+    --cross-answers=cross-answers.txt
+
   make -j"$JOBS"
-  make install
-  if [[ -d bin/default ]]; then
-    "$AR" rcs bin/default/libtalloc.a bin/default/talloc*.o
-    install -m 0644 bin/default/libtalloc.a "$PREFIX/lib/libtalloc.a"
-  fi
+  "$AR" rcs "$PREFIX/lib/libtalloc.a" bin/default/talloc*.o
+  "$RANLIB" "$PREFIX/lib/libtalloc.a"
+  install -m 0644 talloc.h "$PREFIX/include/talloc.h"
 )
 
-TALLOC_SHARED="$(find "$PREFIX/lib" -maxdepth 1 -type f -name 'libtalloc.so*' -print | sort | head -n 1)"
-if [[ -z "$TALLOC_SHARED" ]]; then
-  echo "The pinned talloc build did not produce a shared libtalloc library." >&2
+[[ -s "$PREFIX/lib/libtalloc.a" ]] || {
+  echo "Static libtalloc archive was not produced." >&2
   exit 1
-fi
-install -m 0755 "$TALLOC_SHARED" "$OUT/libtalloc.so.2"
+}
 
-echo "Building libandroid-shmem $SHMEM_VERSION for arm64-v8a"
+echo "Building static libandroid-shmem $SHMEM_VERSION for arm64-v8a"
 (
   cd "$SHMEM_SRC"
-  make -j"$JOBS" CC="$CC" AR="$AR" PREFIX="$PREFIX" install
+  export CC AR
+  export CFLAGS="-O2 -fPIC"
+  make -j"$JOBS" libandroid-shmem.a
+  install -m 0644 libandroid-shmem.a "$PREFIX/lib/libandroid-shmem.a"
+  install -m 0644 shm.h "$PREFIX/include/shm.h"
 )
-install -m 0755 "$PREFIX/lib/libandroid-shmem.so" "$OUT/libandroid-shmem.so"
+[[ -s "$PREFIX/lib/libandroid-shmem.a" ]] || {
+  echo "Static libandroid-shmem archive was not produced." >&2
+  exit 1
+}
 
 echo "Building Termux PRoot $PROOT_VERSION and its Android loader"
-unset PROOT_UNBUNDLE_LOADER || true
+python3 - "$PROOT_SRC/src/GNUmakefile" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+needle = "-z,noexecstack"
+if needle not in text:
+    raise SystemExit("PRoot GNUmakefile no longer contains the expected loader link flag.")
+text = text.replace(needle, "-z,noexecstack,-z,max-page-size=16384")
+path.write_text(text, encoding="utf-8")
+PY
+
 (
   cd "$PROOT_SRC/src"
-  make -j"$JOBS" \
-    CC="$CC" \
-    LD="$CC" \
-    AR="$AR" \
-    STRIP="$STRIP" \
-    OBJCOPY="$OBJCOPY" \
-    OBJDUMP="$OBJDUMP" \
-    CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\" -I. -I$PROOT_SRC/src -I$PREFIX/include" \
-    CFLAGS="-Wall -Wextra -O2 -fPIC -fPIE -DWITH_LIBANDROID_SHMEM" \
-    LDFLAGS="-L$PREFIX/lib -ltalloc -landroid-shmem -Wl,-z,noexecstack -Wl,--no-undefined -pie" \
-    PROOT_WITH_LIBANDROID_SHMEM=true \
-    proot loader/loader
+  export CC AR RANLIB STRIP OBJCOPY OBJDUMP
+  export CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\" -I. -I$PROOT_SRC/src -I$PREFIX/include"
+  export CFLAGS="-Wall -Wextra -O2 -fPIC -fPIE -DWITH_LIBANDROID_SHMEM"
+  export LDFLAGS="-L$PREFIX/lib -Wl,-z,noexecstack -Wl,--no-undefined -Wl,-z,max-page-size=16384 -pie -ltalloc -landroid-shmem -landroid -llog"
+  unset PROOT_UNBUNDLE_LOADER || true
+  make -j"$JOBS" LD="$CC" PROOT_WITH_LIBANDROID_SHMEM=true proot loader/loader
 )
 
 [[ -x "$PROOT_SRC/src/proot" ]] || {
@@ -197,7 +205,7 @@ unset PROOT_UNBUNDLE_LOADER || true
   exit 1
 }
 [[ -x "$PROOT_SRC/src/loader/loader" ]] || {
-  echo "The required PRoot loader was not produced." >&2
+  echo "The required static PRoot loader was not produced." >&2
   exit 1
 }
 
@@ -227,33 +235,25 @@ verify_arm64_elf() {
 
 verify_arm64_elf "$OUT/libproot.so" DYN
 verify_arm64_elf "$OUT/libproot-loader.so" EXEC
-verify_arm64_elf "$OUT/libtalloc.so.2" DYN
-verify_arm64_elf "$OUT/libandroid-shmem.so" DYN
+if "$READELF" -l "$OUT/libproot-loader.so" | grep -q INTERP; then
+  echo "The PRoot loader must be static and must not have PT_INTERP." >&2
+  exit 1
+fi
 
-"$READELF" -d "$OUT/libproot.so" | grep -Fq 'libtalloc.so.2' || {
-  echo "PRoot does not declare the expected libtalloc.so.2 dependency." >&2
+PROOT_DYNAMIC="$("$READELF" -d "$OUT/libproot.so")"
+if grep -Eq 'libtalloc|libandroid-shmem' <<< "$PROOT_DYNAMIC"; then
+  echo "PRoot still has a dynamic talloc or libandroid-shmem dependency." >&2
   exit 1
-}
-"$READELF" -d "$OUT/libproot.so" | grep -Fq 'libandroid-shmem.so' || {
-  echo "PRoot does not declare the expected libandroid-shmem.so dependency." >&2
-  exit 1
-}
-"$READELF" -d "$OUT/libtalloc.so.2" | grep -Fq 'libtalloc.so.2' || {
-  echo "libtalloc SONAME is not libtalloc.so.2." >&2
-  exit 1
-}
-if "$READELF" -d "$OUT/libproot.so" | grep -Eq '\((RPATH|RUNPATH)\)'; then
+fi
+if grep -Eq '\\((RPATH|RUNPATH)\\)' <<< "$PROOT_DYNAMIC"; then
   echo "PRoot must not embed a build-host RPATH/RUNPATH." >&2
   exit 1
 fi
 
 "$STRIP" --strip-unneeded "$OUT/libproot.so"
 "$STRIP" --strip-unneeded "$OUT/libproot-loader.so"
-"$STRIP" --strip-unneeded "$OUT/libtalloc.so.2"
-"$STRIP" --strip-unneeded "$OUT/libandroid-shmem.so"
-chmod 0755 "$OUT/"*.so
+chmod 0755 "$OUT/libproot.so" "$OUT/libproot-loader.so"
 
-# Preserve upstream license and notice files alongside the packaged native payload.
 mkdir -p "$LICENSE_OUT/proot" "$LICENSE_OUT/talloc" "$LICENSE_OUT/libandroid-shmem"
 cp "$PROOT_SRC/COPYING" "$LICENSE_OUT/proot/COPYING"
 for notice in "$TALLOC_SRC"/COPYING* "$TALLOC_SRC"/LICENSE* "$TALLOC_SRC"/NOTICE*; do
@@ -267,13 +267,13 @@ cp "$SHMEM_SRC/LICENSE" "$LICENSE_OUT/libandroid-shmem/LICENSE"
   echo "Android API: $API_LEVEL"
   echo "NDK: $NDK_VERSION"
   echo "PRoot: $PROOT_VERSION (Termux source)"
-  echo "talloc: $TALLOC_VERSION"
-  echo "libandroid-shmem: $SHMEM_VERSION"
+  echo "talloc: $TALLOC_VERSION (static)"
+  echo "libandroid-shmem: $SHMEM_VERSION (static)"
   echo "PRoot loader: libproot-loader.so (static AArch64 ELF)"
-  echo "PROOT_LOADER must point to the loader in applicationInfo.nativeLibraryDir."
+  echo "PROOT_LOADER points to the loader in applicationInfo.nativeLibraryDir."
   echo
-  sha256sum "$OUT/libproot.so" "$OUT/libproot-loader.so" "$OUT/libtalloc.so.2" "$OUT/libandroid-shmem.so"
+  sha256sum "$OUT/libproot.so" "$OUT/libproot-loader.so"
 } > "$LICENSE_OUT/BUILD-INFO.txt"
 
 echo "PRoot Android payload built and validated:"
-ls -lh "$OUT"/libproot.so "$OUT"/libproot-loader.so "$OUT"/libtalloc.so.2 "$OUT"/libandroid-shmem.so
+ls -lh "$OUT/libproot.so" "$OUT/libproot-loader.so"

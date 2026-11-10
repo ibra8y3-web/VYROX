@@ -19,8 +19,12 @@
     "required_ndk": "Android NDK with AArch64 Android/Bionic target",
     "note": "Termux package build recipes are a reference. They do not by themselves produce a VYROX-compatible binary or resolve VYROX's separate package prefix.",
     "build_script": "scripts/build_proot_android.sh",
-    "loader_strategy": "Build the PRoot loader as a separate static AArch64 ELF packaged as libproot-loader.so. At runtime set PROOT_LOADER to the loader beside libproot.so under applicationInfo.nativeLibraryDir.",
-    "native_output_directory": "app/src/main/jniLibs/arm64-v8a"
+    "loader_strategy": "Build the PRoot loader as a separate static AArch64 ELF packaged as libproot-loader.so. At runtime set PROOT_LOADER to that file beside libproot.so under applicationInfo.nativeLibraryDir.",
+    "native_output_directory": "app/src/main/jniLibs/arm64-v8a",
+    "talloc_recipe_commit": "bbcfa39a9469f38606ecb35c080f4a68788f60e7",
+    "talloc_recipe_path": "packages/libtalloc/build.sh",
+    "talloc_build_strategy": "Build talloc 2.4.2 as a PIC static archive and link it into the PRoot executable. Do not package libtalloc.so.",
+    "shared_memory_build_strategy": "Build libandroid-shmem 0.7 as a PIC static archive and link it into PRoot with libandroid and liblog. Do not package libandroid-shmem.so."
   },
   "components": [
     {
@@ -33,19 +37,24 @@
       "license": "GPL-2.0",
       "role": "Android/Bionic PRoot process and filesystem redirection; runtime loader is a separate static executable",
       "required_by": "VYROX Linux RootFS runtime",
-      "state": "pinned_source_not_built_for_vyrox"
+      "state": "pinned_source_not_built_for_vyrox",
+      "packaged_files": [
+        "libproot.so",
+        "libproot-loader.so"
+      ]
     },
     {
       "id": "libtalloc",
-      "version": "2.5.0",
-      "source_url": "https://www.samba.org/ftp/talloc/talloc-2.5.0.tar.gz",
-      "source_sha256": "912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007",
+      "version": "2.4.2",
+      "source_url": "https://www.samba.org/ftp/talloc/talloc-2.4.2.tar.gz",
+      "source_sha256": "85ecf9e465e20f98f9950a52e9a411e14320bc555fa257d87697b7e7a9b1d8a6",
       "source_license": "LGPL-3.0-or-later",
       "termux_package_license_label": "GPL-3.0",
-      "role": "PRoot hierarchical memory allocation dependency",
+      "role": "PRoot hierarchical memory allocation dependency, statically linked into PRoot",
       "required_by": "PRoot",
       "state": "pinned_source_license_review_required",
-      "notes": "The Termux package recipe labels the package GPL-3.0, while the talloc library source headers identify the library under LGPL-3.0-or-later. Review the exact source archive and notices before redistribution."
+      "notes": "The pinned Termux 2.4.2 recipe records this source archive digest and creates libtalloc.a from its PIC objects. The Termux package label is GPL-3.0 while the talloc library source carries LGPL terms; preserve both notice files and review before redistribution.",
+      "packaging_strategy": "Static PIC archive linked into the PRoot PIE; no standalone libtalloc shared object is packaged."
     },
     {
       "id": "libandroid-shmem",
@@ -55,9 +64,10 @@
       "source_commit": "7f0bd7e25dbdd146265aff7c6a890029e374622d",
       "source_sha256": "1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867",
       "license": "BSD-3-Clause",
-      "role": "Android shared-memory compatibility for PRoot",
+      "role": "Android shared-memory compatibility for PRoot, statically linked",
       "required_by": "PRoot",
-      "state": "pinned_source_not_built_for_vyrox"
+      "state": "pinned_source_not_built_for_vyrox",
+      "packaging_strategy": "Static PIC archive linked into PRoot; no standalone libandroid-shmem.so is packaged."
     }
   ],
   "release_gate": {
@@ -69,6 +79,7 @@
     "physical_android_ptrace_test_passed": false,
     "linux_rootfs_shell_execution_passed": false,
     "loader_built": false,
-    "loader_packaged": false
+    "loader_packaged": false,
+    "static_dependencies_linked": false
   }
 }
