@@ -2,9 +2,12 @@ package com.vyrox.runtime.core.files
 
 import android.content.Context
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
+import java.nio.file.Files
+import java.util.Locale
 
 data class ImportedInstaller(
     val displayName: String,
@@ -100,6 +103,39 @@ class InstallerStorage(context: Context) {
                 )
             }
             .sortedByDescending { it.storedFileName }
+    }
+
+    /**
+     * Opens a stored Windows installer only after checking its private path,
+     * file identity, size and actual PE/MSI structure again.
+     */
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun openImportedInstaller(installer: ImportedInstaller): InputStream {
+        val storedName = installer.storedFileName
+        if (storedName.isBlank() || storedName.contains('/') || storedName.contains('\\')) {
+            throw IllegalArgumentException("The stored installer name is invalid.")
+        }
+        val directory = installerDirectory.canonicalFile
+        val candidate = File(installerDirectory, storedName)
+        if (Files.isSymbolicLink(candidate.toPath())) {
+            throw IOException("The stored installer cannot be a symbolic link.")
+        }
+        val file = candidate.canonicalFile
+        if (file.parentFile != directory || !file.isFile || file.length() != installer.sizeBytes) {
+            throw IOException("The imported installer is missing or has changed.")
+        }
+
+        val extension = installer.displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val expectedFormat = when (extension) {
+            "exe" -> WindowsBinaryFormat.PORTABLE_EXECUTABLE
+            "msi" -> WindowsBinaryFormat.MSI_COMPOUND_DATABASE
+            else -> throw IllegalArgumentException("Only EXE and MSI installers can be installed into a Capsule.")
+        }
+        val inspection = WindowsBinaryInspector.inspect(file, installer.displayName)
+        if (inspection.format != expectedFormat) {
+            throw IOException("The imported Windows installer failed its format validation.")
+        }
+        return FileInputStream(file)
     }
 
     fun deleteInstaller(storedFileName: String): Boolean {
