@@ -13,8 +13,8 @@ import java.nio.file.Files
  */
 object ProotExecutableLocator {
     const val FILE_NAME = "libproot.so"
+    val REQUIRED_SHARED_LIBRARIES = listOf("libtalloc.so.2", "libandroid-shmem.so")
     private const val ARM64_ELF_MACHINE = 183
-    private const val ELF_TYPE_DYN = 3
     private const val ELF_HEADER_BYTES = 64
 
     fun locate(
@@ -29,41 +29,57 @@ object ProotExecutableLocator {
         val nativeRoot = nativeLibraryDirectory.canonicalFile
         val candidatePath = File(nativeRoot, FILE_NAME)
         if (Files.isSymbolicLink(candidatePath.toPath())) return null
-
         val candidate = candidatePath.canonicalFile
         if (candidate.parentFile != nativeRoot ||
             !candidate.isFile ||
-            !candidate.canExecute()
+            !candidate.canExecute() ||
+            !isArm64PieExecutable(candidate)
         ) return null
-        if (!isArm64PieExecutable(candidate)) return null
+
+        REQUIRED_SHARED_LIBRARIES.forEach { libraryName ->
+            val libraryPath = File(nativeRoot, libraryName)
+            if (Files.isSymbolicLink(libraryPath.toPath())) return null
+            val library = libraryPath.canonicalFile
+            if (library.parentFile != nativeRoot ||
+                !library.isFile ||
+                !library.canRead() ||
+                !isArm64SharedElf(library)
+            ) return null
+        }
         candidate
     }.getOrNull()
 
     private fun isArm64PieExecutable(file: File): Boolean {
-        if (file.length() < ELF_HEADER_BYTES) return false
-        RandomAccessFile(file, "r").use { input ->
-            val header = ByteArray(ELF_HEADER_BYTES)
-            input.readFully(header)
+        val header = readElfHeader(file) ?: return false
+        return isArm64ElfHeader(header) &&
+            readUnsignedShortLe(header, 16) == 3 &&
+            readUnsignedLongLe(header, 24) > 0L
+    }
 
-            val validMagic = header[0] == 0x7F.toByte() &&
-                header[1] == 'E'.code.toByte() &&
-                header[2] == 'L'.code.toByte() &&
-                header[3] == 'F'.code.toByte()
-            val elfClass = header[4].toInt() and 0xFF
-            val dataEncoding = header[5].toInt() and 0xFF
-            val elfVersion = header[6].toInt() and 0xFF
-            val elfType = readUnsignedShortLe(header, 16)
-            val machine = readUnsignedShortLe(header, 18)
-            val entryPoint = readUnsignedLongLe(header, 24)
+    private fun isArm64SharedElf(file: File): Boolean {
+        val header = readElfHeader(file) ?: return false
+        return isArm64ElfHeader(header) && readUnsignedShortLe(header, 16) == 3
+    }
 
-            return validMagic &&
-                elfClass == 2 &&
-                dataEncoding == 1 &&
-                elfVersion == 1 &&
-                elfType == ELF_TYPE_DYN &&
-                machine == ARM64_ELF_MACHINE &&
-                entryPoint > 0L
-        }
+    private fun readElfHeader(file: File): ByteArray? {
+        if (file.length() < ELF_HEADER_BYTES) return null
+        return runCatching {
+            RandomAccessFile(file, "r").use { input ->
+                ByteArray(ELF_HEADER_BYTES).also(input::readFully)
+            }
+        }.getOrNull()
+    }
+
+    private fun isArm64ElfHeader(header: ByteArray): Boolean {
+        val validMagic = header[0] == 0x7F.toByte() &&
+            header[1] == 'E'.code.toByte() &&
+            header[2] == 'L'.code.toByte() &&
+            header[3] == 'F'.code.toByte()
+        return validMagic &&
+            (header[4].toInt() and 0xFF) == 2 &&
+            (header[5].toInt() and 0xFF) == 1 &&
+            (header[6].toInt() and 0xFF) == 1 &&
+            readUnsignedShortLe(header, 18) == ARM64_ELF_MACHINE
     }
 
     private fun readUnsignedShortLe(bytes: ByteArray, offset: Int): Int =

@@ -95,13 +95,15 @@ loader or implement a relocatable loader directory and test it.
    patches and both dependencies, with the Android NDK/Bionic toolchain.
 2. Review the exact source files, package labels, notices, and distribution
    obligations for PRoot, libtalloc, and libandroid-shmem.
-3. Produce an ARM64 PIE executable and its required shared libraries. Package
-   them under `app/src/main/jniLibs/arm64-v8a/` (the executable filename is
-   `libproot.so`) and keep `useLegacyPackaging` enabled so the payload is
-   extracted into `applicationInfo.nativeLibraryDir`.
-4. Verify the extracted file is a 64-bit little-endian AArch64 PIE executable,
-   its dynamic dependencies resolve from approved packaged/system paths, and
-   it cannot be replaced by app code after installation.
+3. Produce an ARM64 PIE executable plus the exact dynamic dependencies
+   `libtalloc.so.2` and `libandroid-shmem.so`. Package all three as regular
+   ELF files under `app/src/main/jniLibs/arm64-v8a/` (the executable filename
+   is `libproot.so`) and keep `useLegacyPackaging` enabled so the payload is
+   extracted into `applicationInfo.nativeLibraryDir`. Preserve the SONAME
+   filenames expected by `DT_NEEDED`; do not rely on symlinks in APK entries.
+4. Verify the extracted files are 64-bit little-endian AArch64 ELF images,
+   the PRoot image is PIE, and the dynamic dependencies resolve when the
+   supervisor sets a trusted host `LD_LIBRARY_PATH` to `nativeLibraryDir`.
 5. Test `execve()` and PRoot startup on physical Android 12+ devices. Capture
    device model, Android build, target SDK, ABI, exit status, and logs.
 6. Test PRoot `ptrace`, SELinux behavior, bind mounts, signals, process exit,

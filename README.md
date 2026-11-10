@@ -28,6 +28,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
 - MSI Compound File Binary signature check before storing an MSI database.
 - SHA-256 verified runtime package installer with ABI checks, ZIP traversal protection, archive limits, and private atomic installation.
+- PRoot APK packaging preflight requires the ARM64 PIE executable and its two pinned Android shared-library dependencies in the native-library directory; no such binary payload is bundled yet.
 - Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, file operations, engine planning, and package installation.
 - GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
 - Deterministic build-failure diagnostic report uploaded as a separate artifact when CI fails.

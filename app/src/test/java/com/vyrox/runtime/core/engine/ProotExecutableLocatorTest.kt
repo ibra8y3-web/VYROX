@@ -18,6 +18,7 @@ class ProotExecutableLocatorTest {
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
         writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
         executable.setExecutable(true)
+        writeRequiredLibraries(nativeDirectory)
 
         val found = ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a"))
 
@@ -55,6 +56,7 @@ class ProotExecutableLocatorTest {
         val nativeDirectory = temporaryFolder.newFolder("native-links")
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
         writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
+        writeRequiredLibraries(nativeDirectory)
         executable.setExecutable(false)
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
 
@@ -67,9 +69,27 @@ class ProotExecutableLocatorTest {
     }
 
     @Test
+    fun rejectsProotWhenRequiredDynamicLibrariesAreMissing() {
+        val nativeDirectory = temporaryFolder.newFolder("missing-libs")
+        val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
+        writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
+        executable.setExecutable(true)
+        writeRequiredLibraries(nativeDirectory)
+        File(nativeDirectory, "libtalloc.so.2").delete()
+
+        assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
+    }
+
+    @Test
     fun returnsNullWhenBinaryIsNotPackaged() {
         val nativeDirectory = temporaryFolder.newFolder("empty-native")
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
+    }
+
+    private fun writeRequiredLibraries(directory: File) {
+        ProotExecutableLocator.REQUIRED_SHARED_LIBRARIES.forEach { name ->
+            writeElf(File(directory, name), machine = 183, elfType = 3, entryPoint = 0L)
+        }
     }
 
     private fun writeElf(
