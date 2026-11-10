@@ -12,6 +12,8 @@ data class ProotBindMount(
 
 data class ProotLaunchRequest(
     val prootExecutable: File,
+    /** Must be Android's applicationInfo.nativeLibraryDir, not filesDir. */
+    val nativeLibraryRoot: File,
     val rootFsDirectory: File,
     val rootFsArchitecture: LinuxRootFsArchitecture,
     val guestCommand: String,
@@ -36,8 +38,9 @@ object ProotCommandPlanner {
         require(proot.isFile && proot.canExecute()) {
             "A built, executable Android PRoot binary is not installed."
         }
-        require(isInsideAnyAllowedRoot(proot, request.allowedHostRoots)) {
-            "PRoot binary is outside the app-approved engine directories."
+        val nativeLibraryRoot = request.nativeLibraryRoot.canonicalFile
+        require(nativeLibraryRoot.isDirectory && isWithin(nativeLibraryRoot, proot)) {
+            "PRoot must be packaged inside the application's native library directory."
         }
         require(readElfMachine(proot) == ARM64_ELF_MACHINE) {
             "PRoot must be a 64-bit AArch64 Android ELF executable."
@@ -235,6 +238,12 @@ object ProotCommandPlanner {
         val first = header[18].toInt() and 0xFF
         val second = header[19].toInt() and 0xFF
         return first or (second shl 8)
+    }
+
+    private fun isWithin(root: File, candidate: File): Boolean {
+        val rootPath = root.canonicalPath
+        val candidatePath = candidate.canonicalPath
+        return candidatePath == rootPath || candidatePath.startsWith(rootPath + File.separator)
     }
 
     private fun isInsideAnyAllowedRoot(candidate: File, roots: List<File>): Boolean {

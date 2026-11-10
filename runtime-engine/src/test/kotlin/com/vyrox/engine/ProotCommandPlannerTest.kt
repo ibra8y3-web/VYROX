@@ -23,6 +23,7 @@ class ProotCommandPlannerTest {
         val plan = ProotCommandPlanner.build(
             ProotLaunchRequest(
                 prootExecutable = proot,
+                nativeLibraryRoot = root,
                 rootFsDirectory = rootFs,
                 rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
                 guestCommand = "/bin/sh",
@@ -91,6 +92,18 @@ class ProotCommandPlannerTest {
                         ProotBindMount(second, "/mnt/shared")
                     )
                 )
+            )
+        }
+    }
+
+    @Test
+    fun rejectsProotOutsideAndroidNativeLibraryDirectory() {
+        val (root, proot, rootFs) = createValidRuntime()
+        val differentNativeRoot = File(root, "native-lib").apply { mkdirs() }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(
+                request(root, proot, rootFs).copy(nativeLibraryRoot = differentNativeRoot)
             )
         }
     }
@@ -189,6 +202,7 @@ class ProotCommandPlannerTest {
 
     private fun request(root: File, proot: File, rootFs: File) = ProotLaunchRequest(
         prootExecutable = proot,
+        nativeLibraryRoot = root,
         rootFsDirectory = rootFs,
         rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
         guestCommand = "/bin/sh",
@@ -208,9 +222,13 @@ class ProotCommandPlannerTest {
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
         File(rootFs, ".vyrox-rootfs.properties").writeText(
-            "architecture=ARM64\\n" +
-                "archiveSha256=" + "f".repeat(64) + "\\n" +
-                "expandedBytes=4096\\nentryCount=3\\ninstalledAtEpochMillis=1\\n"
+            listOf(
+                "architecture=ARM64",
+                "archiveSha256=" + "f".repeat(64),
+                "expandedBytes=4096",
+                "entryCount=3",
+                "installedAtEpochMillis=1"
+            ).joinToString(System.lineSeparator())
         )
         writeElf(File(rootFs, "bin/sh"), shellMachine)
         return rootFs

@@ -36,10 +36,10 @@ object RuntimeEngineCatalog {
             id = "proot",
             name = "PRoot",
             role = "Rootless Linux userland and filesystem redirection",
-            upstreamUrl = "https://github.com/proot-me/proot",
+            upstreamUrl = "https://github.com/termux/proot",
             license = "GPL-2.0-or-later",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Uses ptrace. Android integration needs a Bionic-compatible, Termux-derived build and device testing."
+            notes = "Pinned source candidate v5.1.107.102. Requires libandroid-shmem and libtalloc, APK native-library packaging, and physical-device ptrace tests."
         ),
         RuntimeEngineDescriptor(
             id = "box64",

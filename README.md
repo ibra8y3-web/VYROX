@@ -23,7 +23,7 @@ VYROX is hosted by Android. It is not a replacement operating system. The projec
 - Vulkan capability probe reports the physical device, API/driver versions, required DXVK extension names, push-constant size, and descriptor-indexing support when exposed by the driver.
 - Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, Windows x64 readiness planner, and PRoot command planner.
 - Linux RootFS TAR/TAR.GZ/TAR.XZ import per Capsule with architecture detection, SHA-256 metadata, safe staged extraction, and size/entry/path limits. This stages files only; no RootFS process is executed.
-- Validated PRoot command-plan generation with app-private path restrictions, guest command validation, bind-mount checks, and argument-vector construction; no PRoot binary is bundled or run.
+- Validated PRoot command-plan generation that requires its Android ARM64 executable to come from the APK native-library directory, verifies an imported ARM64 RootFS, restricts bind mounts, and builds a safe argument vector; no PRoot binary is bundled or run.
 - Runtime process supervisor with timeout, explicit termination, bounded combined stdout/stderr capture, and private per-run logs; it is not a security sandbox and is not yet connected to a Windows engine.
 - PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
 - MSI Compound File Binary signature check before storing an MSI database.
@@ -39,7 +39,7 @@ These features are implemented in source. GitHub Actions is the verification gat
 - VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
 - Mountable Windows drive mapping; the current file explorer operates on app-private file-backed directories only.
 - Wine or another Windows API compatibility layer.
-- PRoot binary, Wine prefix, Box64/FEX translator, DXVK, or VKD3D-Proton runtime. Imported RootFS images are stored but not executed.
+- PRoot binary, Wine prefix, Box64/FEX translator, DXVK, or VKD3D-Proton runtime. Imported RootFS images are stored but not executed. The Termux PRoot source and its Android dependencies are pinned for a future Bionic build only.
 - x86/x64-to-ARM64 translation.
 - A Windows compatibility runtime, native CPU translator, or Windows process loader.
 - DXVK, VKD3D-Proton, DirectX execution, or validation of required Vulkan extensions/features.

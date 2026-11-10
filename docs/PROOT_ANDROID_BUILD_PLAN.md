@@ -10,12 +10,27 @@ Upstream manual: https://github.com/proot-me/proot/blob/master/doc/proot/manual.
 Android reference fork: https://github.com/termux/proot
 Termux package build files: https://github.com/termux/termux-packages/tree/master/packages/proot
 
+The initial Android source candidate is pinned in
+`third_party/proot-sources.lock.json`:
+
+- Termux PRoot `v5.1.107.102`, commit
+  `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, GPL-2.0-or-later.
+- `libandroid-shmem` `0.7`, BSD-3-Clause.
+- `libtalloc` `2.5.0`, GPL-3.0.
+
+The Termux package recipe declares PRoot dependencies on
+`libandroid-shmem` and `libtalloc`, enables the Android shared-memory
+compatibility option, and builds against Bionic. Source pins are not proof of a
+successful VYROX build; all three sources still require reproducible Android
+build recipes and a license/notice review.
+
 ## Current implementation
 
 `ProotCommandPlanner` builds a ProcessBuilder-ready argument vector and checks:
 
-- the PRoot binary is executable, stored below an approved app-private root,
-  and verified as a 64-bit AArch64 ELF before a command plan can be created;
+- the PRoot binary is a 64-bit AArch64 ELF packaged under the APK's
+  `applicationInfo.nativeLibraryDir`; it is not launched from writable
+  `filesDir` storage;
 - the RootFS is an approved image with VYROX metadata, a matching architecture tag, a valid archive digest, and a 64-bit little-endian AArch64 shell;
 - the guest command exists and is executable inside that RootFS;
 - the guest working directory exists;
@@ -27,7 +42,13 @@ Termux package build files: https://github.com/termux/termux-packages/tree/maste
 - the command plan constructor is internal to the runtime module, so application
   code obtains plans from the validator rather than assembling arbitrary vectors.
 
-It does not start PRoot. The APK currently contains no PRoot binary.
+It does not start PRoot. The APK currently contains no PRoot binary. Android 10/API 29 and later reject
+`execve()` of binaries from a target app's writable home directory. The
+packaging path must therefore place a PRoot PIE executable inside the APK's
+native-library payload and resolve it through `applicationInfo.nativeLibraryDir`.
+This packaging strategy still needs an actual APK extraction/execute test on a
+physical Android 12+ device; a JNI library directory path alone does not prove
+that a particular executable layout will run.
 
 A separate `RuntimeProcessSupervisor` can start a validated command plan,
 capture combined stdout/stderr into a private log whose full size is bounded,
@@ -74,9 +95,9 @@ loader or implement a relocatable loader directory and test it.
    app storage execution policy.
 5. Test PRoot on physical Android 12+ devices: `ptrace` permission, SELinux
    behavior, bind mounts, signal handling, process exit, and storage paths.
-6. Run a harmless ARM64 Linux command such as `/bin/echo` inside an imported
+7. Run a harmless ARM64 Linux command such as `/bin/echo` inside an imported
    RootFS and capture stdout, stderr, exit code, and exact device/build details.
-7. Only after that gate passes, add Wine ARM64 to the RootFS and test
+8. Only after that gate passes, add Wine ARM64 to the RootFS and test
    `wineboot` / `wine --version`; this still does not establish Windows x64
    application compatibility.
 
