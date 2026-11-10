@@ -20,6 +20,8 @@ data class ProotLaunchRequest(
     val guestWorkingDirectory: String = "/",
     val arguments: List<String> = emptyList(),
     val environment: Map<String, String> = emptyMap(),
+    /** Maps the guest process to uid/gid 0 inside PRoot only; it does not grant Android root. */
+    val fakeRoot: Boolean = false,
     val bindMounts: List<ProotBindMount> = emptyList(),
     val allowedHostRoots: List<File>
 )
@@ -129,6 +131,10 @@ object ProotCommandPlanner {
             "--rootfs=" + rootFs.absolutePath,
             "--cwd=" + normalizedWorkingDirectory
         )
+        if (request.fakeRoot) {
+            // PRoot maps guest identity only. This is not Android superuser access.
+            args.add(0, "-0")
+        }
 
         request.bindMounts.forEach { bind ->
             val source = bind.hostSource.canonicalFile

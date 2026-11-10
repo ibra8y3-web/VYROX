@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
-  "status": "source_pinned_not_built",
+  "status": "ci_built_and_elf_checked_not_device_verified",
   "checked_on": "2026-11-10",
   "target_host_abi": "arm64-v8a",
   "policy": {
-    "binaries_bundled": false,
+    "binary_sources_committed": false,
+    "apk_runtime_payload_generated_by_ci": true,
     "automatic_downloads": false,
     "require_dependency_license_review": true,
-    "require_android_ndk_build": true,
+    "android_ndk_build_required": true,
     "require_physical_device_ptrace_test": true
   },
   "build_notes": {
@@ -17,10 +18,10 @@
     "proot_unbundle_loader": false,
     "reason": "VYROX must not compile an absolute /data/data/com.termux/files/usr/libexec/proot loader path. Keep the loader embedded until a VYROX-specific relocation strategy is verified.",
     "required_ndk": "Android NDK with AArch64 Android/Bionic target",
-    "note": "Termux package build recipes are a reference. They do not by themselves produce a VYROX-compatible binary or resolve VYROX's separate package prefix.",
+    "note": "CI builds the pinned Android/Bionic sources for arm64-v8a, verifies ELF class/machine/type, verifies the loader is static, checks that talloc and libandroid-shmem are statically linked, and packages the PRoot PIE plus static loader as APK native libraries. This does not verify Android execve/ptrace or execution of a Linux RootFS on a physical phone.",
     "build_script": "scripts/build_proot_android.sh",
     "loader_strategy": "Build the PRoot loader as a separate static AArch64 ELF packaged as libproot-loader.so. At runtime set PROOT_LOADER to that file beside libproot.so under applicationInfo.nativeLibraryDir.",
-    "native_output_directory": "app/src/main/jniLibs/arm64-v8a",
+    "native_output_directory": "app/src/main/jniLibs/arm64-v8a (generated in CI, not checked-in)",
     "talloc_recipe_commit": "bbcfa39a9469f38606ecb35c080f4a68788f60e7",
     "talloc_recipe_path": "packages/libtalloc/build.sh",
     "talloc_build_strategy": "Build talloc 2.4.2 as a PIC static archive and link it into the PRoot executable. Do not package libtalloc.so.",
@@ -37,7 +38,7 @@
       "license": "GPL-2.0",
       "role": "Android/Bionic PRoot process and filesystem redirection; runtime loader is a separate static executable",
       "required_by": "VYROX Linux RootFS runtime",
-      "state": "pinned_source_not_built_for_vyrox",
+      "state": "pinned_source_built_for_apk_in_ci",
       "packaged_files": [
         "libproot.so",
         "libproot-loader.so"
@@ -52,7 +53,7 @@
       "termux_package_license_label": "GPL-3.0",
       "role": "PRoot hierarchical memory allocation dependency, statically linked into PRoot",
       "required_by": "PRoot",
-      "state": "pinned_source_license_review_required",
+      "state": "pinned_source_built_static_in_ci_license_review_required",
       "notes": "The pinned Termux 2.4.2 recipe records this source archive digest and creates libtalloc.a from its PIC objects. The Termux package label is GPL-3.0 while the talloc library source carries LGPL terms; preserve both notice files and review before redistribution.",
       "packaging_strategy": "Static PIC archive linked into the PRoot PIE; no standalone libtalloc shared object is packaged."
     },
@@ -66,20 +67,21 @@
       "license": "BSD-3-Clause",
       "role": "Android shared-memory compatibility for PRoot, statically linked",
       "required_by": "PRoot",
-      "state": "pinned_source_not_built_for_vyrox",
+      "state": "pinned_source_built_static_in_ci",
       "packaging_strategy": "Static PIC archive linked into PRoot; no standalone libandroid-shmem.so is packaged."
     }
   ],
   "release_gate": {
-    "ndk_build_passed": false,
-    "abi_elf_checked": false,
-    "dynamic_dependencies_resolved": false,
+    "ndk_build_passed": true,
+    "abi_elf_checked": true,
+    "static_dependencies_linked": true,
+    "proot_loader_built": true,
+    "proot_loader_packaged": true,
+    "forbidden_dynamic_dependencies_absent": true,
+    "runtime_package_sha256_embedded_in_build_info": true,
+    "complete_dynamic_dependency_audit": false,
     "license_notices_reviewed": false,
-    "runtime_package_sha256_published": false,
-    "physical_android_ptrace_test_passed": false,
-    "linux_rootfs_shell_execution_passed": false,
-    "loader_built": false,
-    "loader_packaged": false,
-    "static_dependencies_linked": false
+    "physical_android_execve_ptrace_test_passed": false,
+    "linux_rootfs_shell_execution_passed": false
   }
 }

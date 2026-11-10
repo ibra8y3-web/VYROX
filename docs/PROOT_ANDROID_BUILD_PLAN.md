@@ -23,9 +23,11 @@ The initial Android source candidate is pinned in
 
 The Termux package recipe declares PRoot dependencies on
 `libandroid-shmem` and `libtalloc`, enables the Android shared-memory
-compatibility option, and builds against Bionic. Source pins are not proof of a
-successful VYROX build; all three sources still require reproducible Android
-build recipes and a license/notice review.
+compatibility option, and builds against Bionic. VYROX now builds the pinned
+source set in CI for arm64-v8a, checks the ELF types and static dependency
+strategy, and packages the PRoot PIE plus its separate static loader in the APK.
+This is CI build evidence only: physical-device execve/ptrace and Linux RootFS
+execution are still unverified, and dependency license review remains open.
 
 ## Current implementation
 
@@ -45,16 +47,14 @@ build recipes and a license/notice review.
 - the command plan constructor is internal to the runtime module, so application
   code obtains plans from the validator rather than assembling arbitrary vectors.
 
-It does not start PRoot. The APK currently contains no PRoot binary. Android 10/API 29 and later reject
+The app's RootFS panel now offers a real PRoot shell probe that invokes `uname` and `id`. The APK CI workflow builds and packages the pinned PRoot PIE and static loader. The probe still must be run on a physical Android device. Android 10/API 29 and later reject
 `execve()` of binaries from a target app's writable home directory. The
 packaging path must therefore place a PRoot PIE executable inside the APK's
 native-library payload and resolve it through `applicationInfo.nativeLibraryDir`.
 The Android Gradle build now uses legacy JNI packaging so native payloads are
 extracted into `nativeLibraryDir`. The app-side locator checks for
 `libproot.so`, an executable ARM64 little-endian ELF file, without copying it
-to writable storage. This packaging strategy still needs an actual APK
-extraction/execute test on a physical Android 12+ device; a matching file path
-alone does not prove that a particular executable layout will run.
+to writable storage. This packaging strategy has passed source build and ELF checks in CI, but still needs an actual APK extraction/execute test on a physical Android 12+ device; a matching file path alone does not prove that the executable layout will run.
 
 A separate `RuntimeProcessSupervisor` can start a validated command plan,
 capture combined stdout/stderr into a private log whose full size is bounded,

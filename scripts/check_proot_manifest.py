@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the pinned Android PRoot source and dependency inventory."""
+"""Validate the pinned Android PRoot source and CI build evidence."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from typing import Any
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED = {
-    "proot": ("5.1.107.102", "GPL-2.0"),
-    "libtalloc": ("2.4.2", "LGPL-3.0-or-later"),
-    "libandroid-shmem": ("0.7", "BSD-3-Clause"),
+    "proot": ("5.1.107.102", "GPL-2.0", "pinned_source_built_for_apk_in_ci"),
+    "libtalloc": ("2.4.2", "LGPL-3.0-or-later", "pinned_source_built_static_in_ci_license_review_required"),
+    "libandroid-shmem": ("0.7", "BSD-3-Clause", "pinned_source_built_static_in_ci"),
 }
 
 
@@ -22,16 +22,23 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if document.get("schema_version") != 1:
         errors.append("schema_version must be 1")
-    if document.get("status") != "source_pinned_not_built":
-        errors.append("source inventory cannot claim an integrated runtime state")
+    if document.get("status") != "ci_built_and_elf_checked_not_device_verified":
+        errors.append("status must distinguish the CI build from physical-device verification")
     if document.get("target_host_abi") != "arm64-v8a":
         errors.append("target_host_abi must be arm64-v8a")
 
     policy = document.get("policy")
     if not isinstance(policy, dict):
         errors.append("policy object is required")
-    elif policy.get("binaries_bundled") is not False or policy.get("automatic_downloads") is not False:
-        errors.append("PRoot source inventory must not imply binaries or automatic downloads")
+    else:
+        if policy.get("binary_sources_committed") is not False:
+            errors.append("native binaries must remain generated build outputs, not checked-in source files")
+        if policy.get("apk_runtime_payload_generated_by_ci") is not True:
+            errors.append("CI must explicitly record APK native payload generation")
+        if policy.get("automatic_downloads") is not False:
+            errors.append("source lock must not imply runtime downloads on the phone")
+        if policy.get("require_physical_device_ptrace_test") is not True:
+            errors.append("a physical Android PRoot test remains a release requirement")
 
     build_notes = document.get("build_notes")
     if not isinstance(build_notes, dict):
@@ -40,7 +47,9 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
         if not COMMIT.fullmatch(str(build_notes.get("termux_packages_commit", ""))):
             errors.append("termux_packages_commit must be a full commit SHA")
         if build_notes.get("proot_unbundle_loader") is not False:
-            errors.append("PRoot loader must remain bundled until a VYROX-specific path is verified")
+            errors.append("PRoot loader must remain separately packaged until device-tested")
+        if "does not verify Android execve/ptrace" not in str(build_notes.get("note", "")):
+            errors.append("build notes must separate CI build success from device execution")
 
     components = document.get("components")
     if not isinstance(components, list):
@@ -64,7 +73,7 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
     if set(by_id) != set(EXPECTED):
         errors.append("components must contain exactly proot, libtalloc, and libandroid-shmem")
 
-    for component_id, (version, license_name) in EXPECTED.items():
+    for component_id, (version, license_name, expected_state) in EXPECTED.items():
         item = by_id.get(component_id)
         if item is None:
             continue
@@ -77,11 +86,8 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
             errors.append(f"{component_id} must have a full SHA-256 source digest")
         if not str(item.get("source_url", "")).startswith("https://"):
             errors.append(f"{component_id} source URL must use HTTPS")
-        if item.get("state") not in {
-            "pinned_source_not_built_for_vyrox",
-            "pinned_source_license_review_required",
-        }:
-            errors.append(f"{component_id} cannot be marked built or integrated by a source lock")
+        if item.get("state") != expected_state:
+            errors.append(f"{component_id} state does not match the documented CI build evidence")
 
     proot_item = by_id.get("proot")
     if proot_item is not None and proot_item.get("source_ref") != "v5.1.107.102":
@@ -90,8 +96,26 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
     gate = document.get("release_gate")
     if not isinstance(gate, dict):
         errors.append("release_gate object is required")
-    elif any(value is True for value in gate.values()):
-        errors.append("No PRoot release gate can be marked complete before Android build/device evidence exists")
+    else:
+        for required in (
+            "ndk_build_passed",
+            "abi_elf_checked",
+            "static_dependencies_linked",
+            "proot_loader_built",
+            "proot_loader_packaged",
+            "forbidden_dynamic_dependencies_absent",
+            "runtime_package_sha256_embedded_in_build_info",
+        ):
+            if gate.get(required) is not True:
+                errors.append(f"CI evidence is missing for completed gate: {required}")
+        for pending in (
+            "complete_dynamic_dependency_audit",
+            "license_notices_reviewed",
+            "physical_android_execve_ptrace_test_passed",
+            "linux_rootfs_shell_execution_passed",
+        ):
+            if gate.get(pending) is not False:
+                errors.append(f"release gate must remain open until evidence exists: {pending}")
 
     return errors
 
@@ -115,7 +139,7 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}")
         return 1
-    print("PRoot source lock valid: 3 pinned components; Android runtime not yet built.")
+    print("PRoot lock valid: pinned ARM64 sources built and ELF-checked in CI; physical-device gates remain open.")
     return 0
 
 

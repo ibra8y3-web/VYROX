@@ -31,7 +31,7 @@ class RuntimeCatalogTest {
         assertTrue(RuntimeEngineCatalog.components.isNotEmpty())
         assertEquals(EngineIntegrationState.PACKAGED_IN_APK, RuntimeEngineCatalog.find("proot")?.integrationState)
         assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("wine")?.integrationState)
-        assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("box64")?.integrationState)
+        assertEquals(EngineIntegrationState.BUILD_RECIPE_AVAILABLE, RuntimeEngineCatalog.find("box64")?.integrationState)
         assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("dxvk")?.integrationState)
         assertEquals("MIT", RuntimeEngineCatalog.find("box64")?.license)
         assertEquals("MIT", RuntimeEngineCatalog.find("fex")?.license)

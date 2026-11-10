@@ -6,14 +6,14 @@ remain separate from the parser/archiver libraries used by the Android app.
 | Component | Intended role | Upstream license | VYROX status |
 |---|---|---|---|
 | Wine | Windows API compatibility | LGPL-2.1-or-later | Research only; no Android build is bundled |
-| PRoot | Rootless Linux filesystem redirection using ptrace | GPL-2.0-or-later; verify exact patched revision | Command planner exists; no executable is bundled |
-| Box64 | x86-64 Linux userspace translation on ARM64 Linux | MIT | Research only; requires a compatible Linux userland |
+| PRoot | Rootless Linux filesystem redirection using ptrace | GPL-2.0-or-later; verify exact patched revision | Pinned ARM64 executable and static loader build in CI and are packaged in the APK; physical-device ptrace/execve validation remains pending |
+| Box64 | x86-64 Linux userspace translation on ARM64 Linux | MIT | Immutable v0.4.4 source-build action is wired for an ARM64 glibc RootFS; no physical-device build or x86-64 execution is verified |
 | FEX | x86/x86-64 Linux userspace translation on ARM64 Linux | MIT | Research only; upstream targets Linux, not Android directly |
 | DXVK | D3D8/9/10/11 over Vulkan | zlib | Vulkan preflight exists; no runtime is bundled |
 | VKD3D-Proton | D3D12 over Vulkan | Verify exact pinned upstream license | Research only |
 | Apache Commons Compress 1.28.0 | TAR archive parsing | Apache-2.0 | Used by RootFS archive staging |
 | XZ for Java 1.12 | .tar.xz decompression | 0BSD | Used by RootFS archive staging |
-| Linux userland | glibc libraries and runtime filesystem | Per-distribution and per-package | User-imported RootFS images are stored but not executed |
+| Linux userland | glibc libraries and runtime filesystem | Per-distribution and per-package | User-imported ARM64 RootFS images can be validated and passed to a PRoot shell probe; physical-device execution remains unverified |
 | Mesa / Turnip / Zink | Open-source graphics driver options | Per-driver and per-package | No driver binaries bundled |
 
 ## Architecture boundary

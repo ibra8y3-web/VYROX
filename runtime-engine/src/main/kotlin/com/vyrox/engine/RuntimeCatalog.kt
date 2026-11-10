@@ -2,6 +2,7 @@ package com.vyrox.engine
 
 enum class EngineIntegrationState {
     RESEARCH_ONLY,
+    BUILD_RECIPE_AVAILABLE,
     SOURCE_BUILT,
     PACKAGED_IN_APK,
     DEVICE_VERIFIED,
@@ -50,8 +51,8 @@ object RuntimeEngineCatalog {
             role = "x86-64 Linux user-space translation",
             upstreamUrl = "https://github.com/ptitSeb/box64",
             license = "MIT",
-            integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Translates x86-64 Linux ELF programs on ARM64 Linux. It does not load Windows PE files; the planned path is x86-64 Wine WOW64 plus an x86-64 glibc library set inside the ARM64 RootFS."
+            integrationState = EngineIntegrationState.BUILD_RECIPE_AVAILABLE,
+            notes = "VYROX can build pinned upstream v0.4.4 inside an imported ARM64 glibc RootFS through PRoot. It translates x86-64 Linux ELF programs, not Windows PE files. Build and execution still require testing."
         ),
         RuntimeEngineDescriptor(
             id = "fex",

@@ -69,6 +69,7 @@ fun VyroxApp(
     rootFsImages: List<LinuxRootFsInfo>,
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
+    box64Installed: Boolean,
     isImporting: Boolean,
     statusMessage: String?,
     isDesktopMode: Boolean,
@@ -92,6 +93,7 @@ fun VyroxApp(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
+    onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -132,6 +134,7 @@ fun VyroxApp(
                     rootFsImages = rootFsImages,
                     hostCapabilities = hostCapabilities,
                     prootBinaryAvailable = prootBinaryAvailable,
+                    box64Installed = box64Installed,
                     isImporting = isImporting,
                     statusMessage = statusMessage,
                     capsuleName = capsuleName,
@@ -170,6 +173,7 @@ fun VyroxApp(
                     onImportRootFs = onImportRootFs,
                     onRemoveRootFs = onRemoveRootFs,
                     onTestRootFs = onTestRootFs,
+                    onBuildBox64 = onBuildBox64,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -208,7 +212,7 @@ fun VyroxApp(
 
 
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable)
+                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -295,6 +299,8 @@ fun VyroxApp(
                         onImportRootFs = onImportRootFs,
                         onRemoveRootFs = onRemoveRootFs,
                         onTestRootFs = onTestRootFs,
+                        onBuildBox64 = onBuildBox64,
+                        box64Installed = box64Installed,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -570,7 +576,8 @@ fun VyroxApp(
 internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,
-    prootBinaryAvailable: Boolean
+    prootBinaryAvailable: Boolean,
+    box64Installed: Boolean
 ) {
     val vulkan = VulkanProbeParser.parse(profile.nativeVulkanInfo)
     val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
@@ -581,7 +588,7 @@ internal fun RuntimeEngineStatusCard(
             },
             x86_64WineWow64Installed = false,
             x86_64RuntimeLibrariesInstalled = false,
-            box64Installed = false,
+            box64Installed = box64Installed,
             prootInstalled = prootBinaryAvailable,
             displayBridgeInstalled = false,
             audioBridgeInstalled = false,
@@ -605,6 +612,12 @@ internal fun RuntimeEngineStatusCard(
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(
+                "Box64 0.4.4 in selected ARM64 RootFS: " +
+                    if (box64Installed) "built and metadata-verified (execution still needs testing)" else "not installed",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
             Text(
                 "PRoot APK binary: " + if (prootBinaryAvailable) {
                     "present (device execution not verified)"
@@ -725,6 +738,8 @@ internal fun CapsuleExplorerCard(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
+    onBuildBox64: (LinuxRootFsInfo) -> Unit,
+    box64Installed: Boolean,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -845,6 +860,14 @@ internal fun CapsuleExplorerCard(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                                if (rootFs.architecture == LinuxRootFsArchitecture.ARM64) {
+                                    OutlinedButton(
+                                        onClick = { onBuildBox64(rootFs) },
+                                        enabled = !isImporting
+                                    ) {
+                                        Text(if (box64Installed) "Rebuild Box64" else "Build Box64 0.4.4")
+                                    }
                                 }
                                 OutlinedButton(
                                     onClick = { onTestRootFs(rootFs) },

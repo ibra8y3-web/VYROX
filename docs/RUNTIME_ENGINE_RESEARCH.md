@@ -1,6 +1,6 @@
 # Windows runtime engine research and integration decision
 
-**Status: research only. No Windows runtime engine is integrated. The JNI/C++ host-information bridge is implemented separately; it is not a compatibility engine.**
+**Status: Windows compatibility is not integrated. The source now includes a pinned Box64 v0.4.4 build action for an ARM64 glibc RootFS, but Box64 has not been built or executed on a physical Android device. The JNI/C++ host-information bridge is not a compatibility engine.**
 
 ## Host target
 
@@ -83,7 +83,7 @@ Do not mark a gate complete because dependencies downloaded or a native library
 compiled. Windows execution requires the physical-device proof in gate 6.
 
 
-## PRoot boundary
+## Box64 build action\n\nThe app offers a pinned Box64 v0.4.4 source build inside an imported ARM64 Debian/Ubuntu glibc RootFS. It uses PRoot guest uid/gid mapping (`-0`) for package installation; that does not grant Android root. For network-based APT/Git operations it binds `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/proc`, and a temporary `/etc/resolv.conf` generated from Android's active network DNS servers. The resolver file is app-private, marked read-only, and deleted after the build process exits. These binds are restricted to the Box64 build request, not enabled for ordinary Capsule processes.\n\nThe build script verifies the exact upstream commit, compiles with the ARM64 DynaRec and `BAD_SIGNAL` flags, checks `box64 --version`, then writes metadata. It does not test an x86-64 program, run Wine, or launch an EXE.\n\n## PRoot boundary
 
 PRoot is the missing userland launcher between an imported Linux RootFS and Wine.
 It relies on `ptrace` and implements rootfs redirection/bind mounts in user space.

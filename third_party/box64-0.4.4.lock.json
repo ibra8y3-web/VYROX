@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "status": "pinned_source_build_recipe",
+  "component": {
+    "id": "box64",
+    "version": "0.4.4",
+    "upstream_url": "https://github.com/ptitSeb/box64",
+    "source_commit": "2f130fab1d6e1a4ee8a71dc60cfdfcc839ad192a",
+    "source_pin_type": "immutable_git_commit",
+    "license": "MIT"
+  },
+  "target": {
+    "operating_system": "Linux",
+    "architecture": "aarch64",
+    "libc": "glibc",
+    "android_abi_artifact": false,
+    "installed_binary": "/usr/local/bin/box64",
+    "metadata_file": "/usr/local/share/vyrox/box64.properties"
+  },
+  "build": {
+    "recipe": "runtime-engine/src/main/kotlin/com/vyrox/engine/Box64BuildPlan.kt",
+    "app_entrypoint": "Capsule Linux RootFS > Build Box64 0.4.4",
+    "execution": "PRoot inside the selected Capsule ARM64 RootFS with fake-root guest identity",
+    "fake_root_boundary": "PRoot guest uid/gid mapping only; no Android superuser privileges",
+    "supported_rootfs": [
+      "Debian",
+      "Ubuntu"
+    ],
+    "provisioner": "APT inside the guest RootFS",
+    "dependencies": [
+      "build-essential",
+      "cmake",
+      "git",
+      "pkg-config",
+      "libx11-dev",
+      "libgl-dev",
+      "libvulkan-dev",
+      "libepoxy-dev",
+      "libasound2-dev",
+      "libpulse-dev",
+      "libpcap-dev",
+      "python3"
+    ],
+    "cmake_options": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_C_COMPILER=gcc",
+      "-DCMAKE_INSTALL_PREFIX=/usr/local",
+      "-DARM64=1",
+      "-DARM_DYNAREC=ON",
+      "-DBAD_SIGNAL=ON"
+    ],
+    "parallel_jobs": 2
+  },
+  "verification": {
+    "source_commit_checked": true,
+    "reported_version_checked": true,
+    "installed_elf_machine": "AArch64",
+    "installed_elf_type": [
+      "ET_EXEC",
+      "ET_DYN"
+    ],
+    "metadata_required": true,
+    "build_on_physical_android_device": false,
+    "box64_x86_64_linux_execution_tested": false,
+    "windows_pe_execution_tested": false
+  },
+  "release_gates": {
+    "box64_source_build_on_physical_device": false,
+    "x86_64_linux_smoke_test_passed": false,
+    "wine_wow64_integrated": false,
+    "windows_exe_execution_passed": false,
+    "display_audio_input_bridges_integrated": false,
+    "direct3d_translation_integrated": false
+  },
+  "notes": [
+    "Box64 handles x86-64 Linux ELF user-space programs on ARM64 Linux. It does not load Windows PE/EXE files.",
+    "The source revision is an immutable commit that changes the upstream version to v0.4.4.",
+    "The recipe builds and installs only inside the selected imported ARM64 glibc RootFS.",
+    "A passing compile and AArch64 ELF check do not prove Box64 can execute x86-64 programs on a physical Android device.",
+    "Wine, Windows PE execution, graphics translation, and device validation remain separate integration milestones."
+  ]
+}

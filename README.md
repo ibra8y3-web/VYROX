@@ -34,8 +34,8 @@
 | File manager | Browse, create, import, copy, move, rename, search, delete and safely extract ZIP archives within Capsule storage |
 | Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
 | Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
-| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning and bounded process-log supervisor |
-| Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging preflight |
+| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning, bounded process logs and a pinned Box64 0.4.4 source-build action inside an ARM64 glibc RootFS |
+| Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging; Box64 has a separate in-RootFS source-build recipe (not an APK library) |
 
 **Source implementation is not the same as verified runtime behavior.** The CI badge reports the latest GitHub Actions result. Native execution and Windows compatibility still require successful Android builds and physical-device testing.
 
@@ -45,7 +45,7 @@ Capsule backup and snapshot operations are file-level archives. They preserve th
 
 - Wine or another Windows API compatibility layer.
 - Running Windows EXE/MSI installers or launching Windows applications and games.
-- x86/x64-to-ARM64 translation through Box64, FEX or another compatible translator.
+- Box64 built and executed on a physical Android device. The source includes a pinned v0.4.4 build action for an ARM64 Debian/Ubuntu RootFS, but that action and x86-64 execution are not yet device-verified. FEX is not integrated.
 - DXVK, VKD3D-Proton, DirectX execution, or validated graphics translation.
 - A working Windows registry and independent Wine Prefix for each Capsule.
 - VM-grade isolation, malware scanning, or a hardened security sandbox.
@@ -81,7 +81,7 @@ docs/                Architecture and component documentation
 .github/workflows/   Android CI
 ~~~
 
-## Component boundaries
+## Building Box64 inside a Capsule\n\nThe Runtime Manager includes a **Build Box64 0.4.4** action for an imported ARM64 Debian/Ubuntu RootFS. It fetches the immutable upstream v0.4.4 commit, builds with ARM64 DynaRec and PRoot mixed-kernel settings, and checks the installed AArch64 ELF plus version metadata. The action uses PRoot guest root identity only; it does not grant Android root. It binds only the required device nodes, `/proc`, and a temporary DNS configuration obtained from Android's active network. This is an x86-64 Linux translator, not a Windows PE loader. Physical-device build and x86-64 execution remain unverified. See [the Box64 build guide](docs/BOX64_RUNTIME_BUILD.md).\n\n## Component boundaries
 
 - **PRoot** is a Linux filesystem/process redirection tool. It is not a Windows API layer, CPU translator, or security boundary.
 - **Box64/FEX** target Linux x86/x86-64 userspace execution on ARM64 Linux; they do not load Windows PE files by themselves.

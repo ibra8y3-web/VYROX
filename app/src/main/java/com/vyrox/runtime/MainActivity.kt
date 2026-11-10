@@ -1,6 +1,7 @@
 package com.vyrox.runtime
 
 import android.net.Uri
+import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
 import android.content.pm.ActivityInfo
@@ -25,7 +26,9 @@ import com.vyrox.runtime.core.host.HostCapabilitiesProbe
 import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.LinuxRootFsManager
 import com.vyrox.engine.LinuxRootFsArchitecture
+import com.vyrox.engine.Box64BuildPlan
 import com.vyrox.engine.ProotCommandPlanner
+import com.vyrox.engine.ProotBindMount
 import com.vyrox.engine.ProotLaunchRequest
 import com.vyrox.engine.RuntimeProcessSupervisor
 import com.vyrox.runtime.ui.VyroxApp
@@ -34,6 +37,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private var desktopModeEnabled by mutableStateOf(true)
@@ -42,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var hostCapabilities: HostCapabilities
     private lateinit var rootFsManager: LinuxRootFsManager
     private var prootBinaryAvailable by mutableStateOf(false)
+    private var box64Installed by mutableStateOf(false)
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
     private val capsuleSnapshots = mutableStateListOf<CapsuleSnapshotInfo>()
@@ -131,6 +138,7 @@ class MainActivity : ComponentActivity() {
                 rootFsImages = rootFsImages.toList(),
                 hostCapabilities = hostCapabilities,
                 prootBinaryAvailable = prootBinaryAvailable,
+                box64Installed = box64Installed,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
                 isDesktopMode = desktopModeEnabled,
@@ -163,6 +171,7 @@ class MainActivity : ComponentActivity() {
                 onImportRootFs = ::requestRootFsImport,
                 onRemoveRootFs = ::removeRootFs,
                 onTestRootFs = ::testRootFs,
+                onBuildBox64 = ::buildBox64,
                 onExtractZipEntry = ::extractZipEntry,
                 onCloneCapsule = ::cloneCapsule,
                 onRenameCapsule = ::renameCapsule,
@@ -436,6 +445,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openCapsule(capsule: CapsuleInfo) {
+        box64Installed = false
         selectedCapsule = capsule
         selectedDrive = 'C'
         selectedPath = ""
@@ -447,6 +457,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun closeCapsuleExplorer() {
+        box64Installed = false
         selectedCapsule = null
         selectedPath = ""
         capsuleEntries.clear()
@@ -610,12 +621,19 @@ class MainActivity : ComponentActivity() {
         val capsule = selectedCapsule ?: return
         lifecycleScope.launch {
             try {
-                val installed = withContext(Dispatchers.IO) {
-                    rootFsManager.listInstalled(capsule.id)
+                val rootFsState = withContext(Dispatchers.IO) {
+                    val installed = rootFsManager.listInstalled(capsule.id)
+                    val hasBox64 = installed.any { info ->
+                        info.architecture == LinuxRootFsArchitecture.ARM64 &&
+                            rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
+                                ?.let(Box64BuildPlan::isInstalled) == true
+                    }
+                    installed to hasBox64
                 }
                 if (selectedCapsule?.id == capsule.id) {
                     rootFsImages.clear()
-                    rootFsImages.addAll(installed)
+                    rootFsImages.addAll(rootFsState.first)
+                    box64Installed = rootFsState.second
                 }
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not read installed Linux RootFS images."
@@ -714,6 +732,147 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    private fun buildBox64(rootFs: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open a Capsule before building Box64."
+            return
+        }
+        if (isImporting) return
+        if (rootFs.architecture != LinuxRootFsArchitecture.ARM64) {
+            statusMessage = "Box64 requires an ARM64 Linux RootFS."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            box64Installed = false
+            statusMessage = "Building pinned Box64 0.4.4 inside this Capsule's ARM64 Linux RootFS. Build dependencies will be installed inside that RootFS."
+            try {
+                val buildResult = withContext(Dispatchers.IO) {
+                    val nativeDirectory = File(applicationInfo.nativeLibraryDir)
+                    val proot = ProotExecutableLocator.locate(
+                        nativeLibraryDirectory = nativeDirectory,
+                        supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
+                    ) ?: throw IOException("The Android PRoot executable or static loader is not packaged in this APK.")
+                    val rootFsDirectory = rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        LinuxRootFsArchitecture.ARM64
+                    ) ?: throw IOException("The selected ARM64 RootFS is no longer installed in this Capsule.")
+
+                    val resolverConfig = createGuestResolverConfiguration()
+                    try {
+                        val systemBinds = listOf(
+                            ProotBindMount(File("/dev/null"), "/dev/null"),
+                            ProotBindMount(File("/dev/zero"), "/dev/zero"),
+                            ProotBindMount(File("/dev/urandom"), "/dev/urandom"),
+                            ProotBindMount(File("/dev/random"), "/dev/random"),
+                            ProotBindMount(File("/proc"), "/proc"),
+                            ProotBindMount(resolverConfig, "/etc/resolv.conf")
+                        )
+                        val approvedRoots = listOf(
+                            filesDir,
+                            cacheDir,
+                            nativeDirectory,
+                            File("/dev"),
+                            File("/proc")
+                        )
+                        val plan = ProotCommandPlanner.build(
+                            ProotLaunchRequest(
+                                prootExecutable = proot,
+                                nativeLibraryRoot = nativeDirectory,
+                                rootFsDirectory = rootFsDirectory,
+                                rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
+                                guestCommand = "/bin/sh",
+                                guestWorkingDirectory = "/",
+                                arguments = listOf("-c", Box64BuildPlan.createShellScript()),
+                                fakeRoot = true,
+                                bindMounts = systemBinds,
+                                allowedHostRoots = approvedRoots
+                            )
+                        )
+                        val supervisor = RuntimeProcessSupervisor(
+                            logDirectory = File(cacheDir, "runtime-logs"),
+                            allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
+                        )
+                        val result = supervisor.start(
+                            plan = plan,
+                            runId = "box64-build-" + System.currentTimeMillis(),
+                            maxLogBytes = 8L * 1024L * 1024L
+                        ).await(60L * 60L * 1000L)
+                        val output = runCatching { result.logFile.readText() }
+                            .getOrDefault("Runtime build log could not be read.")
+                            .takeLast(12_000)
+                        Triple(result, output, Box64BuildPlan.isInstalled(rootFsDirectory))
+                    } finally {
+                        resolverConfig.delete()
+                    }
+                }
+
+                val result = buildResult.first
+                val output = buildResult.second
+                val verified = buildResult.third
+                box64Installed = result.exitCode == 0 &&
+                    !result.timedOut &&
+                    verified &&
+                    output.contains("VYROX_BOX64_READY")
+                statusMessage = if (box64Installed) {
+                    "Box64 0.4.4 was built and its version plus AArch64 ELF metadata were verified inside this Capsule. x86-64 execution and Windows execution have not been verified.\n" + output
+                } else {
+                    "Box64 build did not pass its exit-code, version-marker and installed-ELF checks.\n" + output
+                }
+            } catch (exception: Exception) {
+                box64Installed = false
+                statusMessage = "Box64 build failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                isImporting = false
+                refreshRootFsImages()
+            }
+        }
+    }
+
+    /**
+     * Supplies only DNS server addresses exposed by Android's active network.
+     * The file lives in app-private cache and is mounted read-only by PRoot's
+     * path redirection for this Box64 build process only.
+     */
+    private fun createGuestResolverConfiguration(): File {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+            ?: throw IOException("Android network state service is unavailable.")
+        val network = connectivity.activeNetwork
+            ?: throw IOException("Connect the phone to a network before building Box64.")
+        val linkProperties = connectivity.getLinkProperties(network)
+            ?: throw IOException("Android has no active network DNS configuration.")
+        val servers = linkProperties.dnsServers.mapNotNull { address ->
+            val host = address.hostAddress?.substringBefore('%')?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            when (address) {
+                is Inet4Address, is Inet6Address -> host
+                else -> null
+            }
+        }.distinct()
+        if (servers.isEmpty()) {
+            throw IOException("Android did not report any usable DNS servers for the active network.")
+        }
+
+        val file = File(cacheDir, "vyrox-box64-resolv-" + UUID.randomUUID() + ".conf")
+        if (!file.createNewFile()) throw IOException("Could not create the temporary DNS configuration.")
+        try {
+            file.writeText(
+                servers.joinToString(separator = "\n", postfix = "\n") { "nameserver $it" } +
+                    "options timeout:3 attempts:2\n",
+                Charsets.US_ASCII
+            )
+            if (!file.setReadOnly()) {
+                throw IOException("Could not make the temporary DNS configuration read-only.")
+            }
+            return file
+        } catch (exception: Exception) {
+            file.delete()
+            throw exception
+        }
+    }
 
     private fun testRootFs(rootFs: LinuxRootFsInfo) {
         val capsule = selectedCapsule ?: run {

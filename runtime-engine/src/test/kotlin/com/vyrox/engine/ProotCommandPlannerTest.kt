@@ -45,6 +45,20 @@ class ProotCommandPlannerTest {
     }
 
     @Test
+    fun fakeRootIsExplicitAndDisabledByDefault() {
+        val (root, proot, rootFs) = createValidRuntime()
+
+        val normalPlan = ProotCommandPlanner.build(request(root, proot, rootFs))
+        assertTrue("-0" !in normalPlan.arguments)
+
+        val fakeRootPlan = ProotCommandPlanner.build(
+            request(root, proot, rootFs).copy(fakeRoot = true)
+        )
+        assertTrue(fakeRootPlan.arguments.first() == "-0")
+        assertTrue(fakeRootPlan.arguments.indexOf("-0") < fakeRootPlan.arguments.indexOf("/bin/sh"))
+    }
+
+    @Test
     fun rejectsMissingProotBinary() {
         val root = temporaryFolder.newFolder("root")
         assertThrows(IllegalArgumentException::class.java) {

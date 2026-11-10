@@ -84,6 +84,7 @@ internal fun DesktopShell(
     rootFsImages: List<LinuxRootFsInfo>,
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
+    box64Installed: Boolean,
     isImporting: Boolean,
     statusMessage: String?,
     capsuleName: String,
@@ -113,6 +114,7 @@ internal fun DesktopShell(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
+    onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo) -> Unit,
@@ -244,6 +246,7 @@ internal fun DesktopShell(
                                     rootFsImages = rootFsImages,
                                     hostCapabilities = hostCapabilities,
                                     prootBinaryAvailable = prootBinaryAvailable,
+                                    box64Installed = box64Installed,
                                     isImporting = isImporting,
                                     statusMessage = statusMessage,
                                     capsuleName = capsuleName,
@@ -273,6 +276,7 @@ internal fun DesktopShell(
                                     onImportRootFs = onImportRootFs,
                                     onRemoveRootFs = onRemoveRootFs,
                                     onTestRootFs = onTestRootFs,
+                                    onBuildBox64 = onBuildBox64,
                                     onExtractZipEntry = onExtractZipEntry,
                                     onCloneCapsule = onCloneCapsule,
                                     onRenameCapsule = onRenameCapsule,
@@ -527,6 +531,8 @@ private fun DesktopPanelContent(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
+    onBuildBox64: (LinuxRootFsInfo) -> Unit,
+    box64Installed: Boolean,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo) -> Unit,
@@ -557,7 +563,7 @@ private fun DesktopPanelContent(
                     }
                 }
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable)
+                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
             }
 
             DesktopPanel.CAPSULES -> {
@@ -643,6 +649,8 @@ private fun DesktopPanelContent(
                         onImportRootFs = onImportRootFs,
                         onRemoveRootFs = onRemoveRootFs,
                         onTestRootFs = onTestRootFs,
+                        onBuildBox64 = onBuildBox64,
+                        box64Installed = box64Installed,
                         onExtractZipEntry = onExtractZipEntry,
                         onRenameEntry = onRenameCapsuleEntry,
                         onCopyEntry = onCopyCapsuleEntry,
