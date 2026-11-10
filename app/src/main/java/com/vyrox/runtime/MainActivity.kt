@@ -318,7 +318,13 @@ class MainActivity : ComponentActivity() {
                     }?.relativePath ?: capsuleStorage.createDirectory(
                         capsule.id, 'C', "", "Downloads"
                     ).relativePath
-                    val targetName = UUID.randomUUID().toString().take(8) + "_" + installer.displayName
+                    val uniquePrefix = UUID.randomUUID().toString().take(8) + "_"
+                    val extensionStart = installer.displayName.lastIndexOf('.')
+                    val stem = if (extensionStart > 0) installer.displayName.substring(0, extensionStart)
+                        else installer.displayName
+                    val suffix = if (extensionStart > 0) installer.displayName.substring(extensionStart) else ""
+                    val targetName = uniquePrefix +
+                        stem.take((120 - uniquePrefix.length - suffix.length).coerceAtLeast(1)) + suffix
                     installerStorage.openImportedInstaller(installer).use { input ->
                         capsuleStorage.importFile(
                             capsuleId = capsule.id,
