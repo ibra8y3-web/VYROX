@@ -46,8 +46,7 @@ class WindowsProgramManager(
                         "AppData/Local/Programs",
                         "AppData/Roaming/Programs",
                         "AppData/Roaming/Microsoft/Windows/Start Menu/Programs",
-                        "Desktop",
-                        "Downloads"
+                        "Desktop"
                     ).forEach { relative ->
                         resolveDirectory(userDirectory, relative)?.let(roots::add)
                     }
