@@ -215,6 +215,7 @@ fun VyroxApp(
     onToggleDesktopMode: () -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
+    onInstallImportedInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: (String) -> Unit,
     onDeleteCapsule: (CapsuleInfo) -> Unit,
     onOpenCapsule: (CapsuleInfo) -> Unit,
@@ -318,6 +319,7 @@ fun VyroxApp(
                     onSearchQueryChange = { searchQuery = it },
                     onImport = onImport,
                     onDeleteInstaller = onDeleteInstaller,
+                    onInstallImportedInstaller = onInstallImportedInstaller,
                     onCreateCapsule = {
                         onCreateCapsule(capsuleName)
                         capsuleName = ""
@@ -586,7 +588,14 @@ fun VyroxApp(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         installers.forEach { installer ->
-                            InstallerRow(installer = installer, onDelete = onDeleteInstaller)
+                            InstallerRow(
+                                installer = installer,
+                                canInstall = selectedCapsule != null &&
+                                    winePrefixInfo?.capsuleId == selectedCapsule.id &&
+                                    box64Installed && wineInstalled && !isImporting,
+                                onInstall = onInstallImportedInstaller,
+                                onDelete = onDeleteInstaller
+                            )
                         }
                     }
                 }
@@ -1480,6 +1489,8 @@ internal fun CapsuleRow(
 @Composable
 internal fun InstallerRow(
     installer: ImportedInstaller,
+    canInstall: Boolean,
+    onInstall: (ImportedInstaller) -> Unit,
     onDelete: (ImportedInstaller) -> Unit
 ) {
     Card(
@@ -1508,8 +1519,18 @@ internal fun InstallerRow(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            OutlinedButton(onClick = { onDelete(installer) }) {
-                Text(vxText("Remove"))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (installer.displayName.substringAfterLast('.', "").lowercase() in setOf("exe", "msi")) {
+                    Button(
+                        onClick = { onInstall(installer) },
+                        enabled = canInstall
+                    ) {
+                        Text(vxText("Install"))
+                    }
+                }
+                OutlinedButton(onClick = { onDelete(installer) }) {
+                    Text(vxText("Remove"))
+                }
             }
         }
     }
