@@ -12,9 +12,9 @@ PROOT_SHA256="30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852"
 TALLOC_SHA256="85ecf9e465e20f98f9950a52e9a411e14320bc555fa257d87697b7e7a9b1d8a6"
 SHMEM_SHA256="1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867"
 
-SDK_ROOT="$ANDROID_SDK_ROOT"
+SDK_ROOT="$(printenv ANDROID_SDK_ROOT || true)"
 if [[ -z "$SDK_ROOT" ]]; then
-  SDK_ROOT="$ANDROID_HOME"
+  SDK_ROOT="$(printenv ANDROID_HOME || true)"
 fi
 if [[ -z "$SDK_ROOT" ]]; then
   echo "ANDROID_SDK_ROOT or ANDROID_HOME must point to an installed Android SDK." >&2
@@ -22,8 +22,9 @@ if [[ -z "$SDK_ROOT" ]]; then
 fi
 
 NDK_ROOT="$SDK_ROOT/ndk/$NDK_VERSION"
-if [[ -n "$ANDROID_NDK_HOME" ]]; then
-  NDK_ROOT="$ANDROID_NDK_HOME"
+NDK_OVERRIDE="$(printenv ANDROID_NDK_HOME || true)"
+if [[ -n "$NDK_OVERRIDE" ]]; then
+  NDK_ROOT="$NDK_OVERRIDE"
 fi
 TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
 if [[ ! -x "$TOOLCHAIN/bin/aarch64-linux-android$API_LEVEL-clang" ]]; then
