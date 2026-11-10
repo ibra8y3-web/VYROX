@@ -18,11 +18,11 @@ data class WinePackagePreflightResult(
     val simulationWouldRemovePackages: Boolean,
     val blockers: List<String>
 ) {
-    val isReadyForWineInstallation: Boolean get() = blockers.isEmpty()
+    val preflightPassed: Boolean get() = blockers.isEmpty()
 
     fun summary(): String = buildString {
         append("Wine package preflight: ")
-        append(if (isReadyForWineInstallation) "compatible candidates found" else "blocked")
+        append(if (preflightPassed) "compatible candidates found" else "blocked")
         append("\n")
         append("RootFS: ").append(distributionId).append(' ').append(versionId)
         if (codename.isNotBlank()) append(" (").append(codename).append(')')
@@ -98,7 +98,7 @@ object WinePackagePreflight {
             printf '%s' "${'$'}{candidate:-(none)}"
         }
 
-        WINE_CANDIDATE="${'$'}(package_candidate wine:amd64)"
+        WINE_CANDIDATE="${'$'}(package_candidate wine)"
         WINE64_CANDIDATE="${'$'}(package_candidate wine64:amd64)"
         LIBWINE_CANDIDATE="${'$'}(package_candidate libwine:amd64)"
         printf 'wine_candidate=%s\n' "${'$'}WINE_CANDIDATE"
@@ -106,7 +106,7 @@ object WinePackagePreflight {
         printf 'libwine_candidate=%s\n' "${'$'}LIBWINE_CANDIDATE"
 
         SIMULATION=''
-        if SIMULATION="${'$'}(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install wine:amd64 wine64:amd64 libwine:amd64 2>&1)"; then
+        if SIMULATION="${'$'}(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install wine libwine:amd64 2>&1)"; then
             SIMULATION_EXIT=0
         else
             SIMULATION_EXIT=${'$'}?
@@ -164,12 +164,12 @@ object WinePackagePreflight {
             if ("amd64" !in foreignArchitectures) {
                 add("The amd64 foreign architecture is not enabled; VYROX did not change dpkg configuration.")
             }
-            if (wine == "(none)" || wine64 == "(none)" || libWine == "(none)") {
-                add("One or more amd64 Wine package candidates are missing from the existing APT indexes.")
+            if (wine == "(none)" || libWine == "(none)") {
+                add("The wine wrapper or amd64 libwine candidate is missing from the existing APT indexes.")
             }
-            val candidateVersions = listOf(wine, wine64, libWine).filter { it != "(none)" }.toSet()
+            val candidateVersions = listOf(wine, libWine).filter { it != "(none)" }.toSet()
             if (candidateVersions.size > 1) {
-                add("Wine, wine64 and libwine candidates do not use one matching package version.")
+                add("Wine wrapper and amd64 libwine candidates do not use one matching package version.")
             }
             val wineMajor = wine.substringAfter(':').substringBefore('.').toIntOrNull()
             if (wineMajor == null || wineMajor < MINIMUM_WINE_MAJOR) {

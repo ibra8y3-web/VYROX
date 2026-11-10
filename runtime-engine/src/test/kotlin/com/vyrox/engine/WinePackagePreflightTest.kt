@@ -11,7 +11,7 @@ class WinePackagePreflightTest {
         hostArch: String = "arm64",
         foreign: String = "amd64",
         wine: String = "11.0-1",
-        wine64: String = "11.0-1",
+        wine64: String = "(none)",
         libwine: String = "11.0-1",
         simulationExit: Int = 0,
         removes: Boolean = false,
@@ -36,7 +36,7 @@ class WinePackagePreflightTest {
     fun acceptsMatchingDebianCandidatesAndSuccessfulReadOnlySimulation() {
         val result = WinePackagePreflight.parse(output())
 
-        assertTrue(result.isReadyForWineInstallation)
+        assertTrue(result.preflightPassed)
         assertEquals("11.0-1", result.wineCandidate)
         assertEquals(setOf("amd64"), result.foreignArchitectures)
         assertTrue(result.dependencySimulationPassed)
@@ -46,18 +46,18 @@ class WinePackagePreflightTest {
     fun blocksWhenAmd64ForeignArchitectureIsNotEnabled() {
         val result = WinePackagePreflight.parse(output(foreign = ""))
 
-        assertFalse(result.isReadyForWineInstallation)
+        assertFalse(result.preflightPassed)
         assertTrue(result.blockers.any { it.contains("amd64 foreign architecture") })
     }
 
     @Test
     fun blocksMissingWinePackagesOrMismatchedVersions() {
-        val missing = WinePackagePreflight.parse(output(wine64 = "(none)"))
-        assertFalse(missing.isReadyForWineInstallation)
-        assertTrue(missing.blockers.any { it.contains("candidates are missing") })
+        val missing = WinePackagePreflight.parse(output(libwine = "(none)"))
+        assertFalse(missing.preflightPassed)
+        assertTrue(missing.blockers.any { it.contains("wine wrapper or amd64 libwine") })
 
         val mismatched = WinePackagePreflight.parse(output(libwine = "10.0-1"))
-        assertFalse(mismatched.isReadyForWineInstallation)
+        assertFalse(mismatched.preflightPassed)
         assertTrue(mismatched.blockers.any { it.contains("matching package version") })
     }
 
@@ -65,7 +65,7 @@ class WinePackagePreflightTest {
     fun blocksUnsupportedDistributionAndHostArchitecture() {
         val result = WinePackagePreflight.parse(output(distribution = "alpine", hostArch = "x86_64"))
 
-        assertFalse(result.isReadyForWineInstallation)
+        assertFalse(result.preflightPassed)
         assertEquals(2, result.blockers.count { it.contains("Only Debian") || it.contains("not ARM64") })
     }
 
@@ -74,18 +74,18 @@ class WinePackagePreflightTest {
         val result = WinePackagePreflight.parse(
             output(wine = "10.0-1", wine64 = "10.0-1", libwine = "10.0-1")
         )
-        assertFalse(result.isReadyForWineInstallation)
+        assertFalse(result.preflightPassed)
         assertTrue(result.blockers.any { it.contains("Wine 11 or newer") })
     }
 
     @Test
     fun blocksFailedSimulationAndPackageRemovals() {
         val failed = WinePackagePreflight.parse(output(simulationExit = 100))
-        assertFalse(failed.isReadyForWineInstallation)
+        assertFalse(failed.preflightPassed)
         assertTrue(failed.blockers.any { it.contains("read-only simulation") })
 
         val removing = WinePackagePreflight.parse(output(removes = true))
-        assertFalse(removing.isReadyForWineInstallation)
+        assertFalse(removing.preflightPassed)
         assertTrue(removing.blockers.any { it.contains("would remove") })
     }
 
@@ -105,6 +105,8 @@ class WinePackagePreflightTest {
         assertFalse(script.contains("apt-get update"))
         assertFalse(script.contains("apt-get install "))
         assertTrue(script.contains("apt-get -s"))
+        assertTrue(script.contains("install wine libwine:amd64"))
+        assertFalse(script.contains("install wine64:amd64"))
         assertTrue(script.contains("dpkg --print-foreign-architectures"))
         assertTrue(script.contains("apt-cache policy"))
         assertTrue(script.contains("wine64:amd64"))

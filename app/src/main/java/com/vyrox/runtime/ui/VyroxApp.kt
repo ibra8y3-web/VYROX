@@ -870,46 +870,76 @@ internal fun CapsuleExplorerCard(
                         )
                     } else {
                         rootFsImages.forEach { rootFs ->
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(rootFs.prettyName, fontWeight = FontWeight.Medium)
-                                    Text(
-                                        rootFs.architecture.label + " • " +
-                                            rootFs.distributionId + " " + rootFs.versionId +
-                                            " • " + formatBytes(rootFs.expandedBytes),
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(rootFs.prettyName, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            rootFs.architecture.label + " • " +
+                                                rootFs.distributionId + " " + rootFs.versionId +
+                                                " • " + formatBytes(rootFs.expandedBytes),
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                                 if (rootFs.architecture == LinuxRootFsArchitecture.ARM64) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onCheckWinePackages(rootFs) },
+                                            enabled = !isImporting
+                                        ) {
+                                            Text("Check Wine packages")
+                                        }
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onBuildBox64(rootFs) },
+                                            enabled = !isImporting
+                                        ) {
+                                            Text(if (box64Installed) "Rebuild Box64" else "Build Box64 0.4.4")
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onTestRootFs(rootFs) },
+                                            enabled = !isImporting
+                                        ) {
+                                            Text("Test shell")
+                                        }
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onRemoveRootFs(rootFs) },
+                                            enabled = !isImporting
+                                        ) {
+                                            Text("Remove")
+                                        }
+                                    }
+                                } else {
                                     OutlinedButton(
-                                        onClick = { onCheckWinePackages(rootFs) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { onRemoveRootFs(rootFs) },
                                         enabled = !isImporting
                                     ) {
-                                        Text("Check Wine packages")
+                                        Text("Remove")
                                     }
-                                    OutlinedButton(
-                                        onClick = { onBuildBox64(rootFs) },
-                                        enabled = !isImporting
-                                    ) {
-                                        Text(if (box64Installed) "Rebuild Box64" else "Build Box64 0.4.4")
-                                    }
-                                }
-                                OutlinedButton(
-                                    onClick = { onTestRootFs(rootFs) },
-                                    enabled = !isImporting && rootFs.architecture == LinuxRootFsArchitecture.ARM64
-                                ) {
-                                    Text("Test shell")
-                                }
-                                OutlinedButton(onClick = { onRemoveRootFs(rootFs) }) {
-                                    Text("Remove")
                                 }
                             }
                         }
+
                     }
                 }
             }

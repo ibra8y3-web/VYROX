@@ -48,9 +48,9 @@ The C: and D: drive targets must map only to that Capsule's app-private C:/D: st
 
 ## Read-only Wine package preflight
 
-The Capsule's ARM64 RootFS panel includes **Check Wine packages**. It does not install packages or alter the APT configuration. It reads the existing OS metadata and APT indexes, verifies an ARM64 Debian/Ubuntu guest, checks whether `amd64` is already enabled, reads the candidate versions for `wine:amd64`, `wine64:amd64` and `libwine:amd64`, and runs `apt-get -s` to test dependency resolution without applying changes.
+The Capsule's ARM64 RootFS panel includes **Check Wine packages**. It does not install packages or alter the APT configuration. It reads the existing OS metadata and APT indexes, verifies an ARM64 Debian/Ubuntu guest, checks whether `amd64` is already enabled, reads the `wine` wrapper and `libwine:amd64` candidates, reports the optional legacy `wine64:amd64` candidate for diagnosis, and runs `apt-get -s install wine libwine:amd64` so APT simulates the dependency graph selected by the configured repositories.
 
-The check blocks if the foreign architecture is missing, candidates are unavailable or versions do not match, Wine is older than 11.0, APT cannot resolve the package set, or the simulation proposes removing installed packages. VYROX will not silently add a foreign architecture, change repository sources, refresh indexes or install Wine. A passing preflight only says the currently configured package indexes appear coherent; it is not a Wine installation or prefix-creation result.
+The check blocks if the foreign architecture is missing, wrapper/library candidates are unavailable or versions do not match, Wine is older than 11.0, APT cannot resolve the package set, or the simulation proposes removing installed packages. It does not require a separately named `wine64` package: Wine 11's new WoW64 mode uses the unified `wine` loader. VYROX will not silently add a foreign architecture, change repository sources, refresh indexes or install Wine. A passing preflight only says the currently configured package indexes appear coherent; it is not a Wine installation or prefix-creation result.
 
 ## Actual prefix creation and readiness gate
 
