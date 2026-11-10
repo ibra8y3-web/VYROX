@@ -59,6 +59,43 @@ class ProotCommandPlannerTest {
     }
 
     @Test
+    fun rejectsRootFsWithoutVYROXImportMetadata() {
+        val (root, proot, rootFs) = createValidRuntime()
+        File(rootFs, ".vyrox-rootfs.properties").delete()
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(request(root, proot, rootFs))
+        }
+    }
+
+    @Test
+    fun rejectsBigEndianProotAndRootFsBinaries() {
+        val root = temporaryFolder.newFolder("big-endian-runtime")
+        val proot = File(root, "proot")
+        writeElf(proot, 183, littleEndian = false)
+        val rootFs = createRootFs(root)
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(request(root, proot, rootFs))
+        }
+    }
+
+    @Test
+    fun rejectsDuplicateGuestBindTargets() {
+        val (root, proot, rootFs) = createValidRuntime()
+        val first = File(root, "first").apply { mkdirs() }
+        val second = File(root, "second").apply { mkdirs() }
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(
+                request(root, proot, rootFs).copy(
+                    bindMounts = listOf(
+                        ProotBindMount(first, "/mnt/shared"),
+                        ProotBindMount(second, "/mnt/shared")
+                    )
+                )
+            )
+        }
+    }
+
+    @Test
     fun rejectsNonArm64ProotElf() {
         val root = temporaryFolder.newFolder("x86-proot")
         val proot = File(root, "proot")
@@ -170,13 +207,18 @@ class ProotCommandPlannerTest {
         File(rootFs, "etc").mkdirs()
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
+        File(rootFs, ".vyrox-rootfs.properties").writeText(
+            "architecture=ARM64\\n" +
+                "archiveSha256=" + "f".repeat(64) + "\\n" +
+                "expandedBytes=4096\\nentryCount=3\\ninstalledAtEpochMillis=1\\n"
+        )
         writeElf(File(rootFs, "bin/sh"), shellMachine)
         return rootFs
     }
 
     private fun writeArm64Elf(file: File) = writeElf(file, 183)
 
-    private fun writeElf(file: File, machine: Int) {
+    private fun writeElf(file: File, machine: Int, littleEndian: Boolean = true) {
         file.parentFile?.mkdirs()
         val header = ByteArray(64)
         header[0] = 0x7F.toByte()
@@ -186,8 +228,14 @@ class ProotCommandPlannerTest {
         header[4] = 2
         header[5] = 1
         header[6] = 1
-        header[18] = (machine and 0xFF).toByte()
-        header[19] = ((machine ushr 8) and 0xFF).toByte()
+        if (littleEndian) {
+            header[18] = (machine and 0xFF).toByte()
+            header[19] = ((machine ushr 8) and 0xFF).toByte()
+        } else {
+            header[18] = ((machine ushr 8) and 0xFF).toByte()
+            header[19] = (machine and 0xFF).toByte()
+            header[5] = 2
+        }
         file.writeBytes(header)
         file.setExecutable(true)
     }

@@ -3,6 +3,7 @@ package com.vyrox.engine
 import java.io.File
 import java.io.FileInputStream
 import java.nio.file.Paths
+import java.util.Properties
 
 data class ProotBindMount(
     val hostSource: File,
@@ -52,6 +53,7 @@ object ProotCommandPlanner {
         require(request.rootFsArchitecture == LinuxRootFsArchitecture.ARM64) {
             "The initial Android PRoot host must use an ARM64 RootFS."
         }
+        validateImportedRootFsMetadata(rootFs, request.rootFsArchitecture)
 
         val shell = sequenceOf(File(rootFs, "bin/sh"), File(rootFs, "usr/bin/sh"))
             .firstOrNull { it.isFile }
@@ -94,6 +96,17 @@ object ProotCommandPlanner {
         val normalizedCommand = toGuestAbsolutePath(rootFs, command)
         val normalizedWorkingDirectory = toGuestAbsolutePath(rootFs, workingDirectory)
 
+        require(request.bindMounts.size <= MAX_BIND_MOUNTS) {
+            "Too many host bind mounts were requested."
+        }
+        val guestBindTargets = mutableSetOf<String>()
+        request.bindMounts.forEach { bind ->
+            validateGuestPath(bind.guestTarget)
+            require(guestBindTargets.add(Paths.get(bind.guestTarget).normalize().toString())) {
+                "Two host bind mounts cannot target the same guest path."
+            }
+        }
+
         val args = mutableListOf(
             "--kill-on-exit",
             "--link2symlink",
@@ -126,6 +139,33 @@ object ProotCommandPlanner {
         )
     }
 
+    private fun validateImportedRootFsMetadata(
+        rootFs: File,
+        expectedArchitecture: LinuxRootFsArchitecture
+    ) {
+        val metadataFile = File(rootFs, ".vyrox-rootfs.properties")
+        require(metadataFile.isFile) {
+            "The selected RootFS was not imported by the VYROX RootFS manager."
+        }
+        val metadata = Properties()
+        metadataFile.inputStream().buffered().use { metadata.load(it) }
+        require(metadata.getProperty("architecture") == expectedArchitecture.name) {
+            "RootFS metadata architecture does not match the selected image."
+        }
+        require(metadata.getProperty("archiveSha256").orEmpty().matches(Regex("[0-9a-fA-F]{64}"))) {
+            "The selected RootFS metadata has no valid archive digest."
+        }
+        require((metadata.getProperty("expandedBytes")?.toLongOrNull() ?: 0L) > 0L) {
+            "The selected RootFS metadata has no valid extracted-size record."
+        }
+        require((metadata.getProperty("entryCount")?.toIntOrNull() ?: 0) > 0) {
+            "The selected RootFS metadata has no valid archive-entry record."
+        }
+        require((metadata.getProperty("installedAtEpochMillis")?.toLongOrNull() ?: 0L) > 0L) {
+            "The selected RootFS metadata has no valid import timestamp."
+        }
+    }
+
     private fun resolveGuestPath(rootFs: File, guestPath: String): File {
         validateGuestPath(guestPath)
         val normalized = Paths.get(guestPath).normalize()
@@ -150,7 +190,11 @@ object ProotCommandPlanner {
         require(!path.contains('\u0000') && !path.contains(':') && !path.contains('\\')) {
             "Invalid guest path."
         }
-        val normalized = Paths.get(path).normalize()
+        val pathObject = Paths.get(path)
+        require(pathObject.none { it.toString() == "." || it.toString() == ".." }) {
+            "Guest path contains dot or traversal segments."
+        }
+        val normalized = pathObject.normalize()
         require(!normalized.startsWith("..")) { "Guest path contains traversal." }
     }
 
@@ -183,22 +227,20 @@ object ProotCommandPlanner {
             header[1] != 'E'.code.toByte() ||
             header[2] != 'L'.code.toByte() ||
             header[3] != 'F'.code.toByte() ||
-            header[4] != 2.toByte()
+            header[4] != 2.toByte() ||
+            header[5] != 1.toByte() ||
+            header[6] != 1.toByte()
         ) return null
 
-        val endian = header[5].toInt() and 0xFF
         val first = header[18].toInt() and 0xFF
         val second = header[19].toInt() and 0xFF
-        return when (endian) {
-            1 -> first or (second shl 8)
-            2 -> (first shl 8) or second
-            else -> null
-        }
+        return first or (second shl 8)
     }
 
     private fun isInsideAnyAllowedRoot(candidate: File, roots: List<File>): Boolean {
         val path = candidate.canonicalPath
         return roots.any { root ->
+            if (!root.isDirectory) return@any false
             val rootPath = root.canonicalPath
             path == rootPath || path.startsWith(rootPath + File.separator)
         }
@@ -216,6 +258,7 @@ object ProotCommandPlanner {
     )
 
     private const val ARM64_ELF_MACHINE = 183
+    private const val MAX_BIND_MOUNTS = 32
     private const val MAX_ARGUMENTS = 256
     private const val MAX_ENVIRONMENT_ITEMS = 128
     private const val MAX_ARGUMENT_LENGTH = 8192
