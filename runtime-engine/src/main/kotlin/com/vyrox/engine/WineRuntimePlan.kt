@@ -234,10 +234,23 @@ object WineRuntimePlan {
             CDRIVE='@CDRIVE@'
             ICONS="@D@CDRIVE/VYROX/Icons"
             mkdir -p "@D@ICONS"
-            for root in "@D@CDRIVE/Program Files" "@D@CDRIVE/Program Files (x86)" "@D@CDRIVE/Games"; do
-                [ -d "@D@root" ] || continue
-                find "@D@root" -maxdepth 6 -type f -iname '*.exe' -print
-            done | head -n 250 | while IFS= read -r executable; do
+            {
+                for root in "@D@CDRIVE/Program Files" "@D@CDRIVE/Program Files (x86)" "@D@CDRIVE/Games"; do
+                    [ -d "@D@root" ] || continue
+                    find "@D@root" -maxdepth 6 -type f -iname '*.exe' -print
+                done
+                for user_home in "@D@CDRIVE/Users"/* "@D@CDRIVE/users"/*; do
+                    [ -d "@D@user_home" ] || continue
+                    for root in \
+                        "@D@user_home/AppData/Local/Programs" \
+                        "@D@user_home/AppData/Roaming/Programs" \
+                        "@D@user_home/AppData/Roaming/Microsoft/Windows/Start Menu/Programs" \
+                        "@D@user_home/Desktop" "@D@user_home/Downloads"; do
+                        [ -d "@D@root" ] || continue
+                        find "@D@root" -maxdepth 6 -type f -iname '*.exe' -print
+                    done
+                done
+            } | head -n 250 | while IFS= read -r executable; do
                 [ -f "@D@executable" ] || continue
                 wrestool -x --output="@D@ICONS" -t14 "@D@executable" >/dev/null 2>&1 || true
             done
