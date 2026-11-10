@@ -36,7 +36,7 @@ The landscape-first desktop opens to a wallpaper-style workspace. Its settings a
 | Wine | WineHQ stable amd64 package-install script through Box64; checks Wine 11+ loader metadata |
 | Wine Prefix | Per-Capsule staging, real `wineboot -u`, registry/drive-link verification and atomic activation |
 | EXE/MSI path | Capsule file-manager Run action; EXE starts through Wine, MSI uses `msiexec /i` |
-| Program discovery | Scans machine-wide and per-user install folders (including AppData, Desktop and Downloads); extracts executable icons for the Capsule app list |
+| Program discovery | Scans machine-wide and per-user install folders (including AppData, Desktop and Start Menu); extracts executable icons for the Capsule app list |
 | Windows display/input | Xvfb + Fluxbox + localhost x11vnc; RFB framebuffer viewer, touch pointer/drag, keyboard text and key events |
 | Audio | PulseAudio PCM monitor bridge to Android AudioTrack |
 | Graphics translation | Pinned DXVK 3.1.1 and VKD3D-Proton 3.1 install plan with Vulkan preflight and DLL/metadata verification |
