@@ -18,7 +18,7 @@ class InstallerPolicyTest {
         assertFalse(InstallerPolicy.isSupportedInstaller("readme.txt"))
         assertFalse(InstallerPolicy.isSupportedInstaller("installer"))
         assertFalse(InstallerPolicy.isSupportedInstaller("game.apk"))
-        assertFalse(InstallerPolicy.isSupportedInstaller("malware.zip.exe"))
+        assertFalse(InstallerPolicy.isSupportedInstaller("malware.zipx"))
     }
 
     @Test
