@@ -69,14 +69,15 @@ object WineRuntimePlan {
         BOX64='@BOX64@'
         test -x "@D@BOX64" || { echo "Build Box64 before installing Wine." >&2; exit 44; }
 
+        # Wine 11 new WoW64 has one native "wine" loader; wine64 was removed.
         WINE=''
-        for candidate in /usr/lib/wine/wine64 /usr/lib/x86_64-linux-gnu/wine/wine64 /opt/wine-stable/bin/wine64; do
+        for candidate in /usr/lib/wine/wine /usr/lib/x86_64-linux-gnu/wine/wine /opt/wine-stable/bin/wine; do
             if [ -f "@D@candidate" ] && [ -x "@D@candidate" ]; then WINE="@D@candidate"; break; fi
         done
         if [ -z "@D@WINE" ]; then
-            WINE="@D@(find /usr/lib /opt -type f -name wine64 -perm /111 -print -quit 2>/dev/null || true)"
+            WINE="@D@(find /usr/lib /opt -type f -name wine -perm /111 -print -quit 2>/dev/null || true)"
         fi
-        test -n "@D@WINE" && test -x "@D@WINE" || { echo "The x86-64 Wine ELF loader was not found." >&2; exit 45; }
+        test -n "@D@WINE" && test -x "@D@WINE" || { echo "The x86-64 Wine 11 unified ELF loader was not found." >&2; exit 45; }
         WINE="@D@(readlink -f "@D@WINE")"
 
         WINEBOOT=''
@@ -89,7 +90,7 @@ object WineRuntimePlan {
         test -n "@D@WINEBOOT" && test -f "@D@WINEBOOT" || { echo "The Windows wineboot.exe payload was not found." >&2; exit 46; }
 
         WINE_MACHINE="@D@(od -An -tu2 -j18 -N2 "@D@WINE" | tr -d ' ')"
-        test "@D@WINE_MACHINE" = "62" || { echo "wine64 is not an x86-64 Linux ELF." >&2; exit 47; }
+        test "@D@WINE_MACHINE" = "62" || { echo "The Wine 11 unified loader is not an x86-64 Linux ELF." >&2; exit 47; }
         WINEBOOT_MAGIC="@D@(od -An -tx1 -N2 "@D@WINEBOOT" | tr -d ' \n')"
         test "@D@WINEBOOT_MAGIC" = "4d5a" || { echo "wineboot payload is not a Windows PE file." >&2; exit 48; }
 

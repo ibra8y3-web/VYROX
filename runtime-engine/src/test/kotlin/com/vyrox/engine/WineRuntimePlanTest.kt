@@ -13,7 +13,8 @@ class WineRuntimePlanTest {
         assertTrue(script.contains(WineRuntimePlan.WINEHQ_KEY_URL))
         assertTrue(script.contains("Architectures: amd64"))
         assertTrue(script.contains("winehq-stable"))
-        assertTrue(script.contains("name wine64"))
+        assertTrue(script.contains("name wine"))
+        assertFalse(script.contains("name wine64"))
         assertTrue(script.contains("x86_64-windows/wineboot.exe"))
         assertTrue(script.contains("xvfb"))
         assertTrue(script.contains("x11vnc"))
@@ -29,7 +30,7 @@ class WineRuntimePlanTest {
                 "/opt/vyrox/prefixes/123e4567-e89b-12d3-a456-426614174000",
                 root
             )
-            assertTrue(script.contains("/usr/lib/wine/wine64"))
+            assertTrue(script.contains("/usr/lib/wine/wine"))
             assertTrue(script.contains("/usr/lib/x86_64-linux-gnu/wine/x86_64-windows/wineboot.exe"))
             assertTrue(script.contains("VYROX_WINEBOOT_OK"))
             assertTrue(script.contains(" -u"))
@@ -102,7 +103,7 @@ class WineRuntimePlanTest {
 
     private fun wineRoot(): File {
         val root = Files.createTempDirectory("vyrox-wine-plan").toFile()
-        val loader = File(root, "usr/lib/wine/wine64")
+        val loader = File(root, "usr/lib/wine/wine")
         check(loader.parentFile.mkdirs())
         loader.writeBytes(elfHeader(62))
         loader.setExecutable(true)
