@@ -25,6 +25,8 @@ class GraphicsTranslationPlanTest {
             assertTrue(script.contains("VYROX_GRAPHICS_TRANSLATION_READY"))
             assertTrue(script.contains("WINEPREFIX"))
             assertTrue(script.contains("VYROX_WINE_LOADER"))
+            assertTrue(script.contains("command -v zstd"))
+            assertFalse(script.contains("apt-get install"))
         } finally {
             root.deleteRecursively()
         }

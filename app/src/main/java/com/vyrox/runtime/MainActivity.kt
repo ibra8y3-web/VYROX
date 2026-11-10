@@ -1021,7 +1021,7 @@ class MainActivity : ComponentActivity() {
                                 ProotBindMount(ticket.hostDriveCDirectory, ticket.guestDriveCPath),
                                 ProotBindMount(ticket.hostDriveDDirectory, ticket.guestDriveDPath)
                             ),
-                            fakeRoot = true
+                            fakeRoot = false
                         )
                         PreparedWinePrefix(directory, manager, ticket, preparedShell)
                     } catch (exception: Exception) {
@@ -1123,7 +1123,7 @@ class MainActivity : ComponentActivity() {
                             ProotBindMount(driveC, prefix.guestDriveCPath),
                             ProotBindMount(driveD, prefix.guestDriveDPath)
                         ),
-                        fakeRoot = true
+                        fakeRoot = false
                     )
                     Triple(prefix, driveC, shell)
                 }
@@ -1334,7 +1334,7 @@ class MainActivity : ComponentActivity() {
                             ProotBindMount(hostDriveC, prefix.guestDriveCPath),
                             ProotBindMount(hostDriveD, prefix.guestDriveDPath)
                         ),
-                        fakeRoot = true
+                        fakeRoot = false
                     )
                 }
                 prepared = shell

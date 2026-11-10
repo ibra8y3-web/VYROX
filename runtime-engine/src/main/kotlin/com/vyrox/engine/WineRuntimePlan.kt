@@ -171,9 +171,11 @@ object WineRuntimePlan {
             export WINEDEBUG=-all
             export WINEDLLOVERRIDES='mscoree,mshtml='
             export DISPLAY=:99
-            export PULSE_ALLOW_RUN_AS_ROOT=1
+            export HOME=/tmp/vyrox-home
+            export XDG_RUNTIME_DIR=/tmp/vyrox-runtime
 
-            mkdir -p /tmp/.X11-unix /tmp/pulse-root
+            mkdir -p /tmp/.X11-unix "$HOME" "$XDG_RUNTIME_DIR"
+            chmod 0700 "$HOME" "$XDG_RUNTIME_DIR"
             Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -ac +extension GLX +render -noreset >/tmp/vyrox-xvfb.log 2>&1 &
             XVFB_PID=@D@!
             VNC_PID=''

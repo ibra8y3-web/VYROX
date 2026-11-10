@@ -52,10 +52,10 @@ object GraphicsTranslationPlan {
             export VYROX_WINE_LOADER="@D@WINE_LOADER"
             export VYROX_WINEBOOT_EXE="@D@WINEBOOT_EXE"
 
-            if ! command -v zstd >/dev/null 2>&1; then
-                apt-get update
-                apt-get install -y --no-install-recommends zstd
-            fi
+            command -v zstd >/dev/null 2>&1 || {
+                echo "The zstd package is missing. Re-run the Wine runtime prerequisite installation first."
+                exit 63
+            }
 
             VULKANINFO_BIN="$(command -v vulkaninfo 2>/dev/null || true)"
             test -n "@D@VULKANINFO_BIN" && test -f "@D@VULKANINFO_BIN" || {
