@@ -5,6 +5,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.Properties
@@ -99,10 +100,7 @@ class RuntimePackageManager(
     fun install(spec: RuntimePackageSpec, archive: InputStream): InstalledRuntimePackage {
         spec.validateFor(hostAbi)
         val root = prepareRoot()
-        val stagingRoot = File(root, ".staging")
-        if (!stagingRoot.exists() && !stagingRoot.mkdirs()) {
-            throw IOException("Could not create runtime package staging directory.")
-        }
+        val stagingRoot = ensureChildDirectory(root, ".staging", mustBeNew = false)
 
         val staging = File(stagingRoot, UUID.randomUUID().toString())
         if (!staging.mkdir()) throw IOException("Could not create runtime package staging workspace.")
@@ -133,17 +131,9 @@ class RuntimePackageManager(
             val installedAt = System.currentTimeMillis()
             writePackageMetadata(payload, spec, installedAt)
 
-            val packageDirectory = File(root, spec.id).canonicalFile
-            if (!isWithin(root, packageDirectory)) {
-                throw IOException("Runtime package destination escaped the package root.")
-            }
-            val destinationParent = File(File(packageDirectory, spec.version), spec.hostAbi)
-            if (destinationParent.exists()) {
-                throw IOException("This runtime package version is already installed.")
-            }
-            if (!destinationParent.mkdirs()) {
-                throw IOException("Could not create the runtime package destination.")
-            }
+            val packageDirectory = ensureChildDirectory(root, spec.id, mustBeNew = false)
+            val versionDirectory = ensureChildDirectory(packageDirectory, spec.version, mustBeNew = false)
+            val destinationParent = ensureChildDirectory(versionDirectory, spec.hostAbi, mustBeNew = true)
 
             val installedDirectory = File(destinationParent, "payload")
             if (!payload.renameTo(installedDirectory)) {
@@ -170,16 +160,35 @@ class RuntimePackageManager(
         val root = packageRoot.canonicalFile
         if (!root.isDirectory) return emptyList()
         return root.listFiles().orEmpty()
-            .filter { it.isDirectory && PACKAGE_ID.matches(it.name) }
+            .filter {
+                it.isDirectory &&
+                    !Files.isSymbolicLink(it.toPath()) &&
+                    PACKAGE_ID.matches(it.name) &&
+                    it.canonicalFile.parentFile == root
+            }
             .flatMap { idDirectory ->
                 idDirectory.listFiles().orEmpty()
-                    .filter { it.isDirectory && PACKAGE_VERSION.matches(it.name) }
+                    .filter {
+                        it.isDirectory &&
+                            !Files.isSymbolicLink(it.toPath()) &&
+                            PACKAGE_VERSION.matches(it.name) &&
+                            it.canonicalFile.parentFile == idDirectory.canonicalFile
+                    }
                     .flatMap { versionDirectory ->
                         versionDirectory.listFiles().orEmpty()
-                            .filter { it.isDirectory && it.name == hostAbi }
+                            .filter {
+                                it.isDirectory &&
+                                    !Files.isSymbolicLink(it.toPath()) &&
+                                    it.name == hostAbi &&
+                                    it.canonicalFile.parentFile == versionDirectory.canonicalFile
+                            }
                             .mapNotNull { abiDirectory ->
                                 val payload = File(abiDirectory, "payload").canonicalFile
-                                if (!isWithin(root, payload) || !payload.isDirectory) null
+                                if (
+                                    Files.isSymbolicLink(payload.toPath()) ||
+                                    !isWithin(root, payload) ||
+                                    !payload.isDirectory
+                                ) null
                                 else readPackageMetadata(payload)
                             }
                     }
@@ -191,10 +200,9 @@ class RuntimePackageManager(
         if (!PACKAGE_ID.matches(id) || !PACKAGE_VERSION.matches(version)) return false
         val root = packageRoot.canonicalFile
         if (!root.isDirectory) return false
-        val idDirectory = File(root, id).canonicalFile
-        val versionDirectory = File(idDirectory, version).canonicalFile
-        val abiDirectory = File(versionDirectory, hostAbi).canonicalFile
-        if (!isWithin(root, abiDirectory) || abiDirectory.parentFile != versionDirectory) return false
+        val idDirectory = resolveExistingChildDirectory(root, id) ?: return false
+        val versionDirectory = resolveExistingChildDirectory(idDirectory, version) ?: return false
+        val abiDirectory = resolveExistingChildDirectory(versionDirectory, hostAbi) ?: return false
         val metadata = readPackageMetadata(File(abiDirectory, "payload")) ?: return false
         if (metadata.id != id || metadata.version != version || metadata.hostAbi != hostAbi) return false
         return abiDirectory.deleteRecursively()
@@ -204,9 +212,49 @@ class RuntimePackageManager(
         if (!packageRoot.exists() && !packageRoot.mkdirs()) {
             throw IOException("Could not create the runtime package root.")
         }
+        if (Files.isSymbolicLink(packageRoot.toPath())) {
+            throw SecurityException("Runtime package root cannot be a symbolic link.")
+        }
         val root = packageRoot.canonicalFile
         if (!root.isDirectory) throw IOException("Runtime package root is not a directory.")
         return root
+    }
+
+    private fun ensureChildDirectory(parent: File, name: String, mustBeNew: Boolean): File {
+        val canonicalParent = parent.canonicalFile
+        if (!canonicalParent.isDirectory || Files.isSymbolicLink(parent.toPath())) {
+            throw SecurityException("Runtime package parent directory is not a trusted directory.")
+        }
+
+        val child = File(canonicalParent, name)
+        if (Files.isSymbolicLink(child.toPath())) {
+            throw SecurityException("Runtime package directory cannot be a symbolic link: $name")
+        }
+        if (mustBeNew && child.exists()) {
+            throw IOException("This runtime package version is already installed.")
+        }
+        if (!child.exists() && !child.mkdir()) {
+            throw IOException("Could not create runtime package directory: $name")
+        }
+
+        val canonicalChild = child.canonicalFile
+        if (
+            Files.isSymbolicLink(child.toPath()) ||
+            canonicalChild.parentFile != canonicalParent ||
+            !canonicalChild.isDirectory
+        ) {
+            throw SecurityException("Runtime package directory escaped its parent.")
+        }
+        return canonicalChild
+    }
+
+    private fun resolveExistingChildDirectory(parent: File, name: String): File? {
+        val canonicalParent = parent.canonicalFile
+        if (!canonicalParent.isDirectory || Files.isSymbolicLink(parent.toPath())) return null
+        val child = File(canonicalParent, name)
+        if (!child.isDirectory || Files.isSymbolicLink(child.toPath())) return null
+        val canonicalChild = child.canonicalFile
+        return canonicalChild.takeIf { it.parentFile == canonicalParent && it.isDirectory }
     }
 
     private fun copyAndHashArchive(input: InputStream, destination: File, maximumBytes: Long): String {
@@ -303,9 +351,11 @@ class RuntimePackageManager(
     }
 
     private fun readPackageMetadata(payload: File): InstalledRuntimePackage? = runCatching {
-        if (!payload.isDirectory) return null
+        if (!payload.isDirectory || Files.isSymbolicLink(payload.toPath())) return null
+        val metadataFile = File(payload, PACKAGE_METADATA_FILE)
+        if (Files.isSymbolicLink(metadataFile.toPath()) || !metadataFile.isFile) return null
         val metadata = Properties()
-        File(payload, PACKAGE_METADATA_FILE).inputStream().buffered().use { metadata.load(it) }
+        metadataFile.inputStream().buffered().use { metadata.load(it) }
         val id = metadata.getProperty("id") ?: return null
         val version = metadata.getProperty("version") ?: return null
         val abi = metadata.getProperty("hostAbi") ?: return null

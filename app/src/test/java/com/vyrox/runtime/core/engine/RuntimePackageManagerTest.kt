@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -53,6 +54,39 @@ class RuntimePackageManagerTest {
         }
         assertFalse(File(temporaryFolder.root, "escaped.txt").exists())
         assertTrue(manager.listInstalled().isEmpty())
+    }
+
+    @Test
+    fun rejectsSymbolicLinkInPackageVersionPath() {
+        val archive = zip("bin/runtime" to byteArrayOf(1, 2, 3))
+        val packageRoot = File(temporaryFolder.root, "runtime-packages").apply { mkdirs() }
+        val packageDirectory = File(packageRoot, "wine-runtime").apply { mkdirs() }
+        val outside = temporaryFolder.newFolder("outside-version")
+        Files.createSymbolicLink(
+            File(packageDirectory, "11.21-arm64").toPath(),
+            outside.toPath()
+        )
+        val manager = RuntimePackageManager(packageRoot, "arm64-v8a")
+
+        assertThrows(SecurityException::class.java) {
+            manager.install(spec(archive), ByteArrayInputStream(archive))
+        }
+        assertFalse(File(outside, "arm64-v8a").exists())
+        assertTrue(manager.listInstalled().isEmpty())
+    }
+
+    @Test
+    fun rejectsSymbolicLinkUsedAsStagingDirectory() {
+        val archive = zip("bin/runtime" to byteArrayOf(1, 2, 3))
+        val packageRoot = File(temporaryFolder.root, "runtime-packages").apply { mkdirs() }
+        val outside = temporaryFolder.newFolder("outside-staging")
+        Files.createSymbolicLink(File(packageRoot, ".staging").toPath(), outside.toPath())
+        val manager = RuntimePackageManager(packageRoot, "arm64-v8a")
+
+        assertThrows(SecurityException::class.java) {
+            manager.install(spec(archive), ByteArrayInputStream(archive))
+        }
+        assertTrue(outside.listFiles().orEmpty().isEmpty())
     }
 
     @Test

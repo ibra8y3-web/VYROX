@@ -21,6 +21,8 @@ contents.
 3. Reject a digest mismatch before extracting anything.
 4. Extract into a staging directory, rejecting absolute paths, backslashes,
    drive prefixes, dot segments, duplicate entries, and Zip Slip.
+5. Refuse symbolic links in the staging, package ID, version, and ABI directory
+   chain to prevent writes or removals escaping the package root.
 5. Enforce archive size, expanded size, and entry-count limits.
 6. Verify all required files and set execute permission only for paths
    explicitly declared by the trusted package specification.
