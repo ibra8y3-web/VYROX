@@ -2,6 +2,8 @@ package com.vyrox.runtime.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +30,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ internal fun WindowsDesktopViewer(
     onText: (String) -> Unit
 ) {
     var typing by remember { mutableStateOf("") }
+    var lastPointer by remember { mutableStateOf(0 to 0) }
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFF05070C)
@@ -72,43 +74,45 @@ internal fun WindowsDesktopViewer(
                     Text(status, color = Color.White)
                 }
             } else {
+                val frameWidth = frame.width
+                val frameHeight = frame.height
                 Canvas(
                     modifier = Modifier.weight(1f).fillMaxWidth().background(Color.Black)
-                        .pointerInput(frame) {
-                            detectTapGestures(
-                                onTap = { point ->
-                                    val scale = min(
-                                        size.width.toFloat() / frame.width.toFloat(),
-                                        size.height.toFloat() / frame.height.toFloat()
-                                    )
-                                    val shownWidth = frame.width * scale
-                                    val shownHeight = frame.height * scale
-                                    val left = (size.width - shownWidth) / 2f
-                                    val top = (size.height - shownHeight) / 2f
-                                    val x = ((point.x - left) / scale).toInt()
-                                    val y = ((point.y - top) / scale).toInt()
-                                    if (x in 0 until frame.width && y in 0 until frame.height) {
-                                        onPointer(1, x, y)
-                                        onPointer(0, x, y)
-                                    }
-                                },
-                                onLongPress = { point ->
-                                    val scale = min(
-                                        size.width.toFloat() / frame.width.toFloat(),
-                                        size.height.toFloat() / frame.height.toFloat()
-                                    )
-                                    val shownWidth = frame.width * scale
-                                    val shownHeight = frame.height * scale
-                                    val left = (size.width - shownWidth) / 2f
-                                    val top = (size.height - shownHeight) / 2f
-                                    val x = ((point.x - left) / scale).toInt()
-                                    val y = ((point.y - top) / scale).toInt()
-                                    if (x in 0 until frame.width && y in 0 until frame.height) {
-                                        onPointer(4, x, y)
-                                        onPointer(0, x, y)
-                                    }
+                        .pointerInput(frameWidth, frameHeight) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                val start = mapToFramebuffer(
+                                    down.position,
+                                    size.width,
+                                    size.height,
+                                    frameWidth,
+                                    frameHeight
+                                )
+                                var pressed = start != null
+                                if (start != null) {
+                                    lastPointer = start.first to start.second
+                                    onPointer(1, start.first, start.second)
                                 }
-                            )
+                                while (pressed) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    val mapped = mapToFramebuffer(
+                                        change.position,
+                                        size.width,
+                                        size.height,
+                                        frameWidth,
+                                        frameHeight
+                                    )
+                                    if (mapped != null) {
+                                        lastPointer = mapped.first to mapped.second
+                                        onPointer(if (change.pressed) 1 else 0, mapped.first, mapped.second)
+                                    } else if (!change.pressed) {
+                                        onPointer(0, lastPointer.first, lastPointer.second)
+                                    }
+                                    pressed = change.pressed
+                                    change.consume()
+                                }
+                            }
                         }
                 ) {
                     drawRect(Color.Black)
@@ -166,11 +170,40 @@ internal fun WindowsDesktopViewer(
                 OutlinedButton(onClick = {
                     onKeySym(KEY_ESCAPE, true); onKeySym(KEY_ESCAPE, false)
                 }) { Text("Esc") }
+                OutlinedButton(onClick = {
+                    onPointer(4, lastPointer.first, lastPointer.second)
+                    onPointer(0, lastPointer.first, lastPointer.second)
+                }) { Text(vxText("Right click")) }
+                OutlinedButton(onClick = {
+                    onKeySym(KEY_TAB, true); onKeySym(KEY_TAB, false)
+                }) { Text("Tab") }
             }
         }
     }
 }
 
+private fun mapToFramebuffer(
+    point: Offset,
+    canvasWidth: Int,
+    canvasHeight: Int,
+    frameWidth: Int,
+    frameHeight: Int
+): Pair<Int, Int>? {
+    if (canvasWidth <= 0 || canvasHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) return null
+    val scale = min(
+        canvasWidth.toFloat() / frameWidth.toFloat(),
+        canvasHeight.toFloat() / frameHeight.toFloat()
+    )
+    val shownWidth = frameWidth * scale
+    val shownHeight = frameHeight * scale
+    val left = (canvasWidth - shownWidth) / 2f
+    val top = (canvasHeight - shownHeight) / 2f
+    val x = ((point.x - left) / scale).toInt()
+    val y = ((point.y - top) / scale).toInt()
+    return if (x in 0 until frameWidth && y in 0 until frameHeight) x to y else null
+}
+
 private const val KEY_BACKSPACE = 0xFF08
 private const val KEY_ENTER = 0xFF0D
 private const val KEY_ESCAPE = 0xFF1B
+private const val KEY_TAB = 0xFF09
