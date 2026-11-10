@@ -47,21 +47,34 @@ jobs:
           python3 scripts/check_proot_manifest.py
 
       - name: Build pinned Android PRoot runtime and loader
-        run: bash scripts/build_proot_android.sh
+        id: proot-build
+        run: |
+          set -o pipefail
+          bash scripts/build_proot_android.sh 2>&1 | tee "$RUNNER_TEMP/vyrox-proot-build.log"
+
+      - name: Upload PRoot native build log
+        if: always() && steps.proot-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vyrox-proot-native-build-log
+          path: ${{ runner.temp }}/vyrox-proot-build.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Run unit tests, lint, and assemble debug APK
+        id: gradle-build
         run: |
           set -o pipefail
           gradle --no-daemon :runtime-engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee "$RUNNER_TEMP/vyrox-gradle-build.log"
 
       - name: Generate build failure diagnostic
-        if: failure()
+        if: failure() && steps.gradle-build.outcome == 'failure'
         run: |
           python3 scripts/diagnose_build_failure.py --input "$RUNNER_TEMP/vyrox-gradle-build.log" --output "$RUNNER_TEMP/vyrox-build-diagnostic.md" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat "$RUNNER_TEMP/vyrox-build-diagnostic.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build failure diagnostic
-        if: failure()
+        if: failure() && steps.gradle-build.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: vyrox-build-diagnostic

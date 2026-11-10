@@ -124,13 +124,31 @@ ANSWERS
 
 (
   cd "$TALLOC_SRC"
-  if ! ./configure \
-    --prefix="$PREFIX" \
-    --disable-rpath \
-    --disable-python \
-    --cross-compile \
-    --cross-answers=cross-answers.txt; then
-    echo "talloc cross-answers after the failed configure pass:" >&2
+  configured=0
+  for attempt in 1 2 3 4 5 6 7 8; do
+    configure_log="$WORK/talloc-configure-$attempt.log"
+    if ./configure \
+      --prefix="$PREFIX" \
+      --disable-rpath \
+      --disable-python \
+      --cross-compile \
+      --cross-answers=cross-answers.txt >"$configure_log" 2>&1; then
+      cat "$configure_log"
+      configured=1
+      break
+    fi
+
+    cat "$configure_log"
+    if ! grep -Fq "Cross answers file cross-answers.txt is incomplete" "$configure_log"; then
+      echo "talloc configure failed for a reason other than missing cross answers." >&2
+      echo "Cross-answer file at failure:" >&2
+      cat cross-answers.txt >&2
+      exit 1
+    fi
+    echo "talloc added unanswered cross checks on pass $attempt; retrying with the generated answers."
+  done
+  if [[ "$configured" -ne 1 ]]; then
+    echo "talloc cross-answer configuration did not converge after 8 passes." >&2
     cat cross-answers.txt >&2
     exit 1
   fi
@@ -238,8 +256,9 @@ chmod 0755 "$OUT/"*.so
 # Preserve upstream license and notice files alongside the packaged native payload.
 mkdir -p "$LICENSE_OUT/proot" "$LICENSE_OUT/talloc" "$LICENSE_OUT/libandroid-shmem"
 cp "$PROOT_SRC/COPYING" "$LICENSE_OUT/proot/COPYING"
-find "$TALLOC_SRC" -maxdepth 1 -type f \\( -iname 'COPYING*' -o -iname 'LICENSE*' -o -iname 'NOTICE*' \\) \
-  -exec cp {} "$LICENSE_OUT/talloc/" \\;
+for notice in "$TALLOC_SRC"/COPYING* "$TALLOC_SRC"/LICENSE* "$TALLOC_SRC"/NOTICE*; do
+  [[ -f "$notice" ]] && cp "$notice" "$LICENSE_OUT/talloc/"
+done
 cp "$SHMEM_SRC/LICENSE" "$LICENSE_OUT/libandroid-shmem/LICENSE"
 
 {
