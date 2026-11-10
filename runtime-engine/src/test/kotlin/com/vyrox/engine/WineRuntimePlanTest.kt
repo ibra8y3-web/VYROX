@@ -90,6 +90,8 @@ class WineRuntimePlanTest {
         assertTrue(script.contains("/mnt/vyrox/capsules/123e4567-e89b-12d3-a456-426614174000/drive_c"))
         assertTrue(script.contains("wrestool"))
         assertTrue(script.contains("icotool"))
+        assertTrue(script.contains("AppData/Local/Programs"))
+        assertTrue(script.contains("AppData/Roaming/Microsoft/Windows/Start Menu/Programs"))
     }
 
     @Test
