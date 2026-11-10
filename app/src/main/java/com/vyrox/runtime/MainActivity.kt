@@ -1016,7 +1016,7 @@ class MainActivity : ComponentActivity() {
                     try {
                         val preparedShell = createRootFsShellPlan(
                             rootFsDirectory = directory,
-                            shellScript = WineRuntimePlan.createPrefixShellScript(ticket.guestPrefixPath),
+                            shellScript = WineRuntimePlan.createPrefixShellScript(ticket.guestPrefixPath, directory),
                             extraMounts = listOf(
                                 ProotBindMount(ticket.hostDriveCDirectory, ticket.guestDriveCPath),
                                 ProotBindMount(ticket.hostDriveDDirectory, ticket.guestDriveDPath)
