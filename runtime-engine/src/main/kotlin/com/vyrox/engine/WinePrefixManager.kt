@@ -275,8 +275,9 @@ class WinePrefixManager(
         ) {
             throw IOException("Wineboot C: must remain linked to this Capsule's mounted drive.")
         }
-        val windows = File(capsuleDriveC, "Windows")
-        if (!windows.isDirectory || Files.isSymbolicLink(windows.toPath())) {
+        val windows = capsuleDriveC.listFiles()
+            ?.firstOrNull { it.name.equals("Windows", ignoreCase = true) }
+        if (windows?.isDirectory != true || Files.isSymbolicLink(windows.toPath())) {
             throw IOException("Wineboot did not create the Windows directory on the Capsule C: drive.")
         }
         if (safeDosDevicesDirectory(prefix) == null) {

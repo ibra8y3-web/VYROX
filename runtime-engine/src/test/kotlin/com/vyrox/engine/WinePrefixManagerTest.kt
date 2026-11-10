@@ -193,7 +193,7 @@ class WinePrefixManagerTest {
 
     private fun createWinebootFixture(ticket: WinePrefixCreationTicket) {
         val directory = ticket.stagingDirectory
-        val windows = File(ticket.hostDriveCDirectory, "Windows/System32")
+        val windows = File(ticket.hostDriveCDirectory, "windows/System32")
         check(windows.mkdirs())
         File(windows, "kernel32.dll").writeText("wineboot-kernel32")
         File(directory, "dosdevices").mkdirs()
