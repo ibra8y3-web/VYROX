@@ -228,7 +228,7 @@ class ProotCommandPlannerTest {
                 "expandedBytes=4096",
                 "entryCount=3",
                 "installedAtEpochMillis=1"
-            ).joinToString(System.lineSeparator())
+            ).joinToString("\n")
         )
         writeElf(File(rootFs, "bin/sh"), shellMachine)
         return rootFs

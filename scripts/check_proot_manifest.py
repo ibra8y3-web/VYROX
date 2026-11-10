@@ -47,7 +47,20 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
         errors.append("components list is required")
         return errors
 
-    by_id = {item.get("id"): item for item in components if isinstance(item, dict)}
+    by_id: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(components):
+        if not isinstance(item, dict):
+            errors.append(f"components[{index}] must be an object")
+            continue
+        component_id = item.get("id")
+        if not isinstance(component_id, str) or not component_id:
+            errors.append(f"components[{index}].id is required")
+            continue
+        if component_id in by_id:
+            errors.append(f"duplicate component id: {component_id}")
+            continue
+        by_id[component_id] = item
+
     if set(by_id) != set(EXPECTED):
         errors.append("components must contain exactly proot, libtalloc, and libandroid-shmem")
 
@@ -70,7 +83,8 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
         }:
             errors.append(f"{component_id} cannot be marked built or integrated by a source lock")
 
-    if by_id.get("proot", {}).get("source_ref") != "v5.1.107.102":
+    proot_item = by_id.get("proot")
+    if proot_item is not None and proot_item.get("source_ref") != "v5.1.107.102":
         errors.append("PRoot source_ref must be pinned to the Android Termux release tag")
 
     gate = document.get("release_gate")

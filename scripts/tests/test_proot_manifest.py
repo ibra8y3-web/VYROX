@@ -40,6 +40,20 @@ class ProotManifestTests(unittest.TestCase):
         document["release_gate"]["ndk_build_passed"] = True
         self.assertTrue(any("release gate" in error.lower() for error in validate_manifest(document)))
 
+    def test_missing_component_returns_error_without_crashing(self):
+        document = self.load()
+        document["components"] = [
+            item for item in document["components"] if item["id"] != "proot"
+        ]
+        errors = validate_manifest(document)
+        self.assertTrue(any("exactly proot" in error for error in errors))
+
+    def test_duplicate_component_ids_are_rejected(self):
+        document = self.load()
+        document["components"].append(copy.deepcopy(document["components"][0]))
+        errors = validate_manifest(document)
+        self.assertTrue(any("duplicate component id" in error for error in errors))
+
     def test_talloc_license_difference_is_preserved_explicitly(self):
         document = self.load()
         talloc = next(item for item in document["components"] if item["id"] == "libtalloc")
