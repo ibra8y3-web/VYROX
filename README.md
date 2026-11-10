@@ -29,14 +29,14 @@ The landscape-first desktop opens to a wallpaper-style workspace. Its settings a
 | Desktop shell | Desktop workspace, settings panel, navigation to Capsules, files, installer library and runtime tools; Arabic RTL and English LTR |
 | Capsule workspaces | Separate logical C:/D: folders; create, rename, clone, backup, checksummed snapshots and restore |
 | File manager | Browse, import, create, copy, move, rename, search, delete and safe ZIP extraction within a Capsule |
-| Installer inspection | EXE/PE, MSI and ZIP format inspection; app-private installer library |
+| Installer inspection | EXE/PE, MSI and ZIP inspection; app-private library; validated EXE/MSI copy to Capsule C:\\Downloads and launch through the Capsule Wine prefix |
 | Linux RootFS | TAR/TAR.GZ/TAR.XZ import, staged extraction, path/size validation and metadata |
 | PRoot | Pinned Android native build and APK packaging workflow; guest command planner, bind-mount validation, bounded logs and process stop/timeout |
 | Box64 | Pinned v0.4.4 source-build action inside an ARM64 glibc RootFS, with ELF/version and minimal x86-64 syscall smoke checks |
 | Wine | WineHQ stable amd64 package-install script through Box64; checks Wine 11+ loader metadata |
 | Wine Prefix | Per-Capsule staging, real `wineboot -u`, registry/drive-link verification and atomic activation |
 | EXE/MSI path | Capsule file-manager Run action; EXE starts through Wine, MSI uses `msiexec /i` |
-| Program discovery | Scans common C: install folders and extracts Windows executable icons for the Capsule's app list |
+| Program discovery | Scans machine-wide and per-user install folders (including AppData, Desktop and Downloads); extracts executable icons for the Capsule app list |
 | Windows display/input | Xvfb + Fluxbox + localhost x11vnc; RFB framebuffer viewer, touch pointer/drag, keyboard text and key events |
 | Audio | PulseAudio PCM monitor bridge to Android AudioTrack |
 | Graphics translation | Pinned DXVK 3.1.1 and VKD3D-Proton 3.1 install plan with Vulkan preflight and DLL/metadata verification |
