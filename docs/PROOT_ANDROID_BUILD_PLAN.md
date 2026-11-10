@@ -37,9 +37,35 @@ it validates argument/environment counts and lengths before creating a log.
 It is generic process supervision, not a security sandbox, and the VYROX UI
 does not yet invoke it for Windows programs.
 
+## Pinned Android source set
+
+The reference source set is now recorded in
+`third_party/proot-android.lock.json` and checked by
+`scripts/check_proot_manifest.py`:
+
+- Termux PRoot `v5.1.107.102`, source commit
+  `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, archive SHA-256
+  `30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852`,
+  GPL-2.0.
+- `libtalloc` `2.5.0`, SHA-256
+  `912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007`.
+  The Termux recipe labels its package GPL-3.0, while the talloc library source
+  headers identify LGPL-3.0-or-later. The exact source and notices need a final
+  review before redistribution.
+- `libandroid-shmem` `0.7`, source commit
+  `7f0bd7e25dbdd146265aff7c6a890029e374622d`, SHA-256
+  `1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867`,
+  BSD-3-Clause.
+
+These are source pins only. No PRoot binary is included in the APK. The Termux
+build recipe points its unbundled loader at its own package prefix; VYROX must
+not reuse that absolute path. The first VYROX build should retain the embedded
+loader or implement a relocatable loader directory and test it.
+
 ## Required next steps
 
-1. Pin a specific Termux PRoot source revision and capture its full patch set.
+1. Build the pinned sources for `arm64-v8a` with the Android NDK/Bionic
+   toolchain, including the exact Termux patches and dependency versions.
 2. Build it for `arm64-v8a` with the Android NDK/Bionic toolchain, including all
    required Termux patches and dependencies.
 3. Audit GPL-2.0-or-later obligations and preserve notices and corresponding

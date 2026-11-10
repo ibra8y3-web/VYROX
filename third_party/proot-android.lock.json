@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "status": "source_pinned_not_built",
+  "checked_on": "2026-11-10",
+  "target_host_abi": "arm64-v8a",
+  "policy": {
+    "binaries_bundled": false,
+    "automatic_downloads": false,
+    "require_dependency_license_review": true,
+    "require_android_ndk_build": true,
+    "require_physical_device_ptrace_test": true
+  },
+  "build_notes": {
+    "source_of_build_recipe": "https://github.com/termux/termux-packages",
+    "termux_packages_commit": "8f6d47ce1d4b1b818cf24f5a283ed4b632894e4c",
+    "recipe_path": "packages/proot/build.sh",
+    "proot_unbundle_loader": false,
+    "reason": "VYROX must not compile an absolute /data/data/com.termux/files/usr/libexec/proot loader path. Keep the loader embedded until a VYROX-specific relocation strategy is verified.",
+    "required_ndk": "Android NDK with AArch64 Android/Bionic target",
+    "note": "Termux package build recipes are a reference. They do not by themselves produce a VYROX-compatible binary or resolve VYROX's separate package prefix."
+  },
+  "components": [
+    {
+      "id": "proot",
+      "version": "5.1.107.102",
+      "source_url": "https://github.com/termux/proot/archive/refs/tags/v5.1.107.102.zip",
+      "source_ref": "v5.1.107.102",
+      "source_commit": "52d65a4dc140ca554d241a1438ddd4f6b00c9813",
+      "source_sha256": "30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852",
+      "license": "GPL-2.0",
+      "role": "Android/Bionic PRoot process and filesystem redirection",
+      "required_by": "VYROX Linux RootFS runtime",
+      "state": "pinned_source_not_built_for_vyrox"
+    },
+    {
+      "id": "libtalloc",
+      "version": "2.5.0",
+      "source_url": "https://www.samba.org/ftp/talloc/talloc-2.5.0.tar.gz",
+      "source_sha256": "912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007",
+      "source_license": "LGPL-3.0-or-later",
+      "termux_package_license_label": "GPL-3.0",
+      "role": "PRoot hierarchical memory allocation dependency",
+      "required_by": "PRoot",
+      "state": "pinned_source_license_review_required",
+      "notes": "The Termux package recipe labels the package GPL-3.0, while the talloc library source headers identify the library under LGPL-3.0-or-later. Review the exact source archive and notices before redistribution."
+    },
+    {
+      "id": "libandroid-shmem",
+      "version": "0.7",
+      "source_url": "https://github.com/termux/libandroid-shmem/archive/refs/tags/v0.7.tar.gz",
+      "source_ref": "v0.7",
+      "source_commit": "7f0bd7e25dbdd146265aff7c6a890029e374622d",
+      "source_sha256": "1e5ff8459bc0a8c229dd8a94b27d119987e09ef3414331c2b5ebfff20b98e867",
+      "license": "BSD-3-Clause",
+      "role": "Android shared-memory compatibility for PRoot",
+      "required_by": "PRoot",
+      "state": "pinned_source_not_built_for_vyrox"
+    }
+  ],
+  "release_gate": {
+    "ndk_build_passed": false,
+    "abi_elf_checked": false,
+    "dynamic_dependencies_resolved": false,
+    "license_notices_reviewed": false,
+    "runtime_package_sha256_published": false,
+    "physical_android_ptrace_test_passed": false,
+    "linux_rootfs_shell_execution_passed": false
+  }
+}
