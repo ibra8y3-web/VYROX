@@ -2,6 +2,9 @@ package com.vyrox.engine
 
 enum class EngineIntegrationState {
     RESEARCH_ONLY,
+    SOURCE_BUILT,
+    PACKAGED_IN_APK,
+    DEVICE_VERIFIED,
     NOT_BUNDLED
 }
 
@@ -30,7 +33,7 @@ object RuntimeEngineCatalog {
             upstreamUrl = "https://gitlab.winehq.org/wine/wine",
             license = "LGPL-2.1-or-later",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Requires an Android-compatible Unix userland and a tested ARM64 build."
+            notes = "The intended x64-first path is x86-64 Wine WOW64 running through Box64 inside an ARM64 glibc RootFS. Wine and its x86-64 libraries are not installed or executed yet."
         ),
         RuntimeEngineDescriptor(
             id = "proot",
@@ -38,8 +41,8 @@ object RuntimeEngineCatalog {
             role = "Rootless Linux userland and filesystem redirection",
             upstreamUrl = "https://github.com/termux/proot",
             license = "GPL-2.0-or-later",
-            integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Pinned source candidate v5.1.107.102. Requires libandroid-shmem and libtalloc, APK native-library packaging, and physical-device ptrace tests."
+            integrationState = EngineIntegrationState.PACKAGED_IN_APK,
+            notes = "Pinned source v5.1.107.102 builds with libandroid-shmem and libtalloc; the CI workflow packages the ARM64 PRoot PIE and static loader into the debug APK. Device execve, ptrace, and RootFS execution remain unverified."
         ),
         RuntimeEngineDescriptor(
             id = "box64",
@@ -48,7 +51,7 @@ object RuntimeEngineCatalog {
             upstreamUrl = "https://github.com/ptitSeb/box64",
             license = "MIT",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Not a standalone Windows PE loader; normally paired with Wine in a Linux userland."
+            notes = "Translates x86-64 Linux ELF programs on ARM64 Linux. It does not load Windows PE files; the planned path is x86-64 Wine WOW64 plus an x86-64 glibc library set inside the ARM64 RootFS."
         ),
         RuntimeEngineDescriptor(
             id = "fex",
@@ -57,7 +60,7 @@ object RuntimeEngineCatalog {
             upstreamUrl = "https://github.com/FEX-Emu/FEX",
             license = "MIT",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "Upstream targets Linux, not Android directly, and requires an x86-64 RootFS."
+            notes = "Alternative to Box64, not part of the initial x64 path. Requires a compatible ARM64 Linux host and a provisioned x86-64 guest environment."
         ),
         RuntimeEngineDescriptor(
             id = "dxvk",
@@ -169,11 +172,14 @@ object VulkanProbeParser {
 
 data class X64RuntimePrerequisites(
     val hostAbis: Set<String>,
-    val linuxUserlandInstalled: Boolean,
-    val x86_64RootFsInstalled: Boolean,
-    val arm64WineInstalled: Boolean,
+    val arm64RootFsInstalled: Boolean,
+    val x86_64WineWow64Installed: Boolean,
+    val x86_64RuntimeLibrariesInstalled: Boolean,
     val box64Installed: Boolean,
     val prootInstalled: Boolean,
+    val displayBridgeInstalled: Boolean,
+    val audioBridgeInstalled: Boolean,
+    val inputBridgeInstalled: Boolean,
     val d3d11Requested: Boolean,
     val dxvkInstalled: Boolean,
     val vulkan: VulkanProbe,
@@ -196,26 +202,35 @@ object RuntimeCompatibilityPlanner {
             if ("arm64-v8a" !in prerequisites.hostAbis) {
                 add("The Android ARM64 host ABI is not available.")
             }
-            if (!prerequisites.linuxUserlandInstalled) {
-                add("A compatible Linux userland has not been installed.")
+            if (!prerequisites.arm64RootFsInstalled) {
+                add("An ARM64 glibc Linux RootFS has not been installed for PRoot.")
             }
-            if (!prerequisites.x86_64RootFsInstalled) {
-                add("An x86-64 guest RootFS has not been installed.")
+            if (!prerequisites.x86_64WineWow64Installed) {
+                add("An x86-64 Wine WOW64 runtime has not been installed.")
             }
-            if (!prerequisites.arm64WineInstalled) {
-                add("An ARM64 Wine build has not been integrated.")
+            if (!prerequisites.x86_64RuntimeLibrariesInstalled) {
+                add("The x86-64 glibc and Wine runtime libraries are not provisioned.")
             }
             if (!prerequisites.prootInstalled) {
-                add("PRoot has not been built and integrated for Android.")
+                add("PRoot has not passed Android device execution tests.")
             }
             if (!prerequisites.box64Installed) {
-                add("Box64 has not been built and integrated for the selected userland.")
+                add("Box64 has not been installed in the ARM64 Linux RootFS.")
             }
             if (!prerequisites.windowsPeLoaderInstalled) {
                 add("The VYROX Windows PE loader/session bridge is not integrated.")
             }
             if (!prerequisites.capsuleDriveMappingInstalled) {
                 add("Capsule C:/D: paths are not mapped into a Windows runtime.")
+            }
+            if (!prerequisites.displayBridgeInstalled) {
+                add("A Windows window/display bridge to the Android desktop is not integrated.")
+            }
+            if (!prerequisites.audioBridgeInstalled) {
+                add("A Windows audio bridge to Android audio output is not integrated.")
+            }
+            if (!prerequisites.inputBridgeInstalled) {
+                add("Windows keyboard, pointer, and game-controller input mapping is not integrated.")
             }
             if (!prerequisites.physicalDeviceExecutionVerified) {
                 add("No Windows executable has passed a physical-device execution test.")
@@ -225,7 +240,7 @@ object RuntimeCompatibilityPlanner {
                     add("DXVK has not been integrated.")
                 }
                 if (!prerequisites.vulkan.supportsDxvk3Requirements) {
-                    add("The Vulkan device has not passed the DXVK 3.x Vulkan 1.4 feature requirements.")
+                    add("The selected Vulkan device has not passed the DXVK 3.x feature requirements.")
                 }
             }
         }

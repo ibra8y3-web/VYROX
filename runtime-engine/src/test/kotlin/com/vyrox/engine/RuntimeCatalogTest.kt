@@ -27,12 +27,12 @@ class RuntimeCatalogTest {
     }
 
     @Test
-    fun everyExternalEngineIsExplicitlyNotIntegrated() {
+    fun engineCatalogDistinguishesPackagedProotFromUnintegratedWindowsLayers() {
         assertTrue(RuntimeEngineCatalog.components.isNotEmpty())
-        assertTrue(RuntimeEngineCatalog.components.all {
-            it.integrationState == EngineIntegrationState.RESEARCH_ONLY ||
-                it.integrationState == EngineIntegrationState.NOT_BUNDLED
-        })
+        assertEquals(EngineIntegrationState.PACKAGED_IN_APK, RuntimeEngineCatalog.find("proot")?.integrationState)
+        assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("wine")?.integrationState)
+        assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("box64")?.integrationState)
+        assertEquals(EngineIntegrationState.RESEARCH_ONLY, RuntimeEngineCatalog.find("dxvk")?.integrationState)
         assertEquals("MIT", RuntimeEngineCatalog.find("box64")?.license)
         assertEquals("MIT", RuntimeEngineCatalog.find("fex")?.license)
         assertEquals("GPL-2.0-or-later", RuntimeEngineCatalog.find("proot")?.license)
@@ -98,23 +98,29 @@ class RuntimeCatalogTest {
         val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
             X64RuntimePrerequisites(
                 hostAbis = setOf("arm64-v8a"),
-                linuxUserlandInstalled = false,
-                x86_64RootFsInstalled = false,
-                arm64WineInstalled = false,
+                arm64RootFsInstalled = false,
+                x86_64WineWow64Installed = false,
+                x86_64RuntimeLibrariesInstalled = false,
                 box64Installed = false,
                 prootInstalled = false,
+                displayBridgeInstalled = false,
+                audioBridgeInstalled = false,
+                inputBridgeInstalled = false,
                 d3d11Requested = true,
                 dxvkInstalled = false,
                 vulkan = VulkanProbeParser.parse(null)
             )
         )
         assertFalse(readiness.preflightPassed)
-        assertTrue(readiness.blockers.any { it.contains("Linux userland") })
-        assertTrue(readiness.blockers.any { it.contains("Wine") })
+        assertTrue(readiness.blockers.any { it.contains("ARM64 glibc Linux RootFS") })
+        assertTrue(readiness.blockers.any { it.contains("Wine WOW64") })
         assertTrue(readiness.blockers.any { it.contains("Box64") })
         assertTrue(readiness.blockers.any { it.contains("PRoot") })
         assertTrue(readiness.blockers.any { it.contains("DXVK") })
         assertTrue(readiness.blockers.any { it.contains("PE loader") })
+        assertTrue(readiness.blockers.any { it.contains("display bridge") })
+        assertTrue(readiness.blockers.any { it.contains("audio bridge") })
+        assertTrue(readiness.blockers.any { it.contains("input mapping") })
         assertTrue(readiness.blockers.any { it.contains("physical-device") })
     }
 
@@ -123,11 +129,14 @@ class RuntimeCatalogTest {
         val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
             X64RuntimePrerequisites(
                 hostAbis = setOf("arm64-v8a"),
-                linuxUserlandInstalled = true,
-                x86_64RootFsInstalled = true,
-                arm64WineInstalled = true,
+                arm64RootFsInstalled = true,
+                x86_64WineWow64Installed = true,
+                x86_64RuntimeLibrariesInstalled = true,
                 box64Installed = true,
                 prootInstalled = true,
+                displayBridgeInstalled = true,
+                audioBridgeInstalled = true,
+                inputBridgeInstalled = true,
                 d3d11Requested = true,
                 dxvkInstalled = true,
                 vulkan = completeVulkan(),

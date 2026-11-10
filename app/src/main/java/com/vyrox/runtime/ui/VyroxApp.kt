@@ -59,6 +59,8 @@ private val VyroxColors = darkColorScheme(
 fun VyroxApp(
     installers: List<ImportedInstaller>,
     capsules: List<CapsuleInfo>,
+    capsuleSnapshots: List<CapsuleSnapshotInfo>,
+    snapshotManagerCapsule: CapsuleInfo?,
     selectedCapsule: CapsuleInfo?,
     selectedDrive: Char,
     currentPath: String,
