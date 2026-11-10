@@ -3,6 +3,7 @@ package com.vyrox.engine
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -111,6 +112,18 @@ class RuntimeProcessSupervisor(
         require(hostLibraryDirectory.isDirectory && isInsideApprovedRoot(hostLibraryDirectory)) {
             "The host native-library directory is outside the app-approved directories."
         }
+        val guestLoaderPath = File(hostLibraryDirectory, "libproot-loader.so")
+        if (Files.isSymbolicLink(guestLoaderPath.toPath())) {
+            throw IOException("The PRoot guest loader cannot be a symbolic link.")
+        }
+        val guestLoader = guestLoaderPath.canonicalFile
+        if (
+            !guestLoader.isFile ||
+            !guestLoader.canExecute() ||
+            guestLoader.parentFile != hostLibraryDirectory
+        ) {
+            throw IOException("The Android-packaged PRoot guest loader is missing or not executable.")
+        }
         val workingDirectory = plan.processWorkingDirectory.canonicalFile
         if (!workingDirectory.isDirectory) {
             throw IOException("The runtime working directory does not exist.")
@@ -149,6 +162,7 @@ class RuntimeProcessSupervisor(
                     // are packaged beside it in nativeLibraryDir. Do not allow
                     // guest-provided LD_* values to override this trusted path.
                     environment()["LD_LIBRARY_PATH"] = hostLibraryDirectory.absolutePath
+                    environment()["PROOT_LOADER"] = guestLoader.absolutePath
                     environment().putAll(plan.environment)
                 }
                 .start()

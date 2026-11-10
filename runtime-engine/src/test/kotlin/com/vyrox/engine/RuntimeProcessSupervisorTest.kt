@@ -63,16 +63,19 @@ class RuntimeProcessSupervisorTest {
     fun setsHostLibraryPathFromApprovedNativeLibraryDirectory() {
         val working = temporaryFolder.newFolder("host-loader-work")
         val logs = temporaryFolder.newFolder("host-loader-logs")
+        val plan = shellPlan(
+            working,
+            listOf("-c", "printf '%s|%s' \"\$LD_LIBRARY_PATH\" \"\$PROOT_LOADER\"")
+        )
         val process = RuntimeProcessSupervisor(
             logs,
             listOf(temporaryFolder.root, File("/usr"))
-        ).start(
-            shellPlan(working, listOf("-c", "printf '%s' \"\$LD_LIBRARY_PATH\"")),
-            "host-loader"
-        )
+        ).start(plan, "host-loader")
         val result = process.await(5_000)
         assertEquals(0, result.exitCode)
-        assertTrue(result.logFile.readText().contains(File("/usr/lib").canonicalPath))
+        val captured = result.logFile.readText()
+        assertTrue(captured.contains(plan.nativeLibraryRoot.canonicalPath))
+        assertTrue(captured.contains(File(plan.nativeLibraryRoot, "libproot-loader.so").canonicalPath))
     }
 
     @Test
@@ -127,11 +130,31 @@ class RuntimeProcessSupervisorTest {
         working: File,
         arguments: List<String>,
         environment: Map<String, String> = emptyMap()
-    ) = ProotCommandPlan(
-        executable = File("/bin/sh"),
-        arguments = arguments,
-        environment = environment,
-        processWorkingDirectory = working,
-        nativeLibraryRoot = File("/usr/lib")
-    )
+    ): ProotCommandPlan {
+        val nativeLibraryRoot = temporaryFolder.newFolder("native-${working.name}")
+        val loader = File(nativeLibraryRoot, "libproot-loader.so")
+        writeArm64ExecutableHeader(loader)
+        loader.setExecutable(true)
+        return ProotCommandPlan(
+            executable = File("/bin/sh"),
+            arguments = arguments,
+            environment = environment,
+            processWorkingDirectory = working,
+            nativeLibraryRoot = nativeLibraryRoot
+        )
+    }
+
+    private fun writeArm64ExecutableHeader(file: File) {
+        val header = ByteArray(64)
+        header[0] = 0x7F.toByte()
+        header[1] = 'E'.code.toByte()
+        header[2] = 'L'.code.toByte()
+        header[3] = 'F'.code.toByte()
+        header[4] = 2
+        header[5] = 1
+        header[6] = 1
+        header[16] = 2
+        header[18] = 183.toByte()
+        file.writeBytes(header)
+    }
 }
