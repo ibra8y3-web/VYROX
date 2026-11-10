@@ -10,6 +10,11 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal fun writeRfbClientInit(stream: DataOutputStream) {
+    stream.writeByte(1) // Shared desktop session.
+    stream.flush()
+}
+
 /**
  * Small RFB 3.8 client for the localhost-only x11vnc session created by VYROX.
  * Supports Raw rectangles and DesktopSize updates.
@@ -150,6 +155,9 @@ class VncRfbClient(
             input.readFully(reason)
             throw IOException(String(reason, Charsets.UTF_8))
         }
+
+        // RFB 3.8 requires ClientInit (shared flag) before ServerInit.
+        writeRfbClientInit(stream)
 
         val width = input.readUnsignedShort()
         val height = input.readUnsignedShort()
