@@ -15,7 +15,7 @@ The current target is an ARM64 Android device running an imported ARM64 glibc Li
 5. **Prefix:** a separate, real Wine prefix for each Capsule.
 6. **Graphics:** begin with Wine's software/fallback path; add DXVK only after device Vulkan and driver validation.
 
-Wine 11.0 was released on January 13, 2026. Its new WoW64 architecture is considered fully supported, can run 32-bit Windows applications within a 64-bit prefix, and uses a single `wine` loader rather than the former separate `wine64` loader. Wine's release notes state that pure 32-bit prefixes are deprecated in the new WoW64 mode. See the [Wine 11.0 release notes](https://www.winehq.org/news/2026011301).
+Wine 11.0 was released on January 13, 2026. Its new WoW64 architecture is considered fully supported, can run 32-bit Windows applications within a 64-bit prefix, and uses a single `wine` loader rather than the former separate `wine64` loader. Wine's release notes state that pure 32-bit prefixes are deprecated in the new WoW64 mode. WineHQ's latest development release by November 10, 2026 is 11.21 (October 30, 2026), while 11.0 remains the stable baseline. VYROX keeps the stable channel as its minimum and does not silently promote a development build. See the [Wine 11.0 release notes](https://www.winehq.org/news/2026011301) and [WineHQ news archive](https://www.winehq.org/news/).
 
 Box64 translates x86-64 **Linux ELF** programs; it does not load Windows PE files. Wine supplies the Windows API layer. Both components must be present and separately verified before Windows execution can be attempted. See [Box64's upstream usage and Wine guidance](https://github.com/ptitSeb/box64#usage).
 
@@ -45,6 +45,12 @@ The final structure must follow the paths and symbolic-link semantics produced b
 Each Capsule has its own prefix ID, registry, user profile, installed applications, configuration and snapshot lifecycle. Prefix creation must never reuse another Capsule's `WINEPREFIX`.
 
 The C: and D: drive targets must map only to that Capsule's app-private C:/D: storage. The bind source paths must be validated by the existing PRoot command planner and remain under approved VYROX storage roots. A mounted directory is a path mapping, not a security sandbox.
+
+## Read-only Wine package preflight
+
+The Capsule's ARM64 RootFS panel includes **Check Wine packages**. It does not install packages or alter the APT configuration. It reads the existing OS metadata and APT indexes, verifies an ARM64 Debian/Ubuntu guest, checks whether `amd64` is already enabled, reads the candidate versions for `wine:amd64`, `wine64:amd64` and `libwine:amd64`, and runs `apt-get -s` to test dependency resolution without applying changes.
+
+The check blocks if the foreign architecture is missing, candidates are unavailable or versions do not match, Wine is older than 11.0, APT cannot resolve the package set, or the simulation proposes removing installed packages. VYROX will not silently add a foreign architecture, change repository sources, refresh indexes or install Wine. A passing preflight only says the currently configured package indexes appear coherent; it is not a Wine installation or prefix-creation result.
 
 ## Actual prefix creation and readiness gate
 

@@ -96,6 +96,7 @@ fun VyroxApp(
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
+    onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -177,6 +178,7 @@ fun VyroxApp(
                     onRemoveRootFs = onRemoveRootFs,
                     onTestRootFs = onTestRootFs,
                     onBuildBox64 = onBuildBox64,
+                    onCheckWinePackages = onCheckWinePackages,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -303,6 +305,7 @@ fun VyroxApp(
                         onRemoveRootFs = onRemoveRootFs,
                         onTestRootFs = onTestRootFs,
                         onBuildBox64 = onBuildBox64,
+                        onCheckWinePackages = onCheckWinePackages,
                         box64Installed = box64Installed,
                         winePrefixInfo = winePrefixInfo,
                         onRenameEntry = {
@@ -744,6 +747,7 @@ internal fun CapsuleExplorerCard(
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
+    onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     box64Installed: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
@@ -882,6 +886,12 @@ internal fun CapsuleExplorerCard(
                                     )
                                 }
                                 if (rootFs.architecture == LinuxRootFsArchitecture.ARM64) {
+                                    OutlinedButton(
+                                        onClick = { onCheckWinePackages(rootFs) },
+                                        enabled = !isImporting
+                                    ) {
+                                        Text("Check Wine packages")
+                                    }
                                     OutlinedButton(
                                         onClick = { onBuildBox64(rootFs) },
                                         enabled = !isImporting

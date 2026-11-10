@@ -29,6 +29,7 @@ import com.vyrox.engine.LinuxRootFsArchitecture
 import com.vyrox.engine.Box64BuildPlan
 import com.vyrox.engine.WinePrefixInfo
 import com.vyrox.engine.WinePrefixManager
+import com.vyrox.engine.WinePackagePreflight
 import com.vyrox.engine.ProotCommandPlanner
 import com.vyrox.engine.ProotBindMount
 import com.vyrox.engine.ProotLaunchRequest
@@ -176,6 +177,7 @@ class MainActivity : ComponentActivity() {
                 onRemoveRootFs = ::removeRootFs,
                 onTestRootFs = ::testRootFs,
                 onBuildBox64 = ::buildBox64,
+                onCheckWinePackages = ::checkWinePackages,
                 onExtractZipEntry = ::extractZipEntry,
                 onCloneCapsule = ::cloneCapsule,
                 onRenameCapsule = ::renameCapsule,
@@ -747,6 +749,90 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    /**
+     * Read-only Wine package compatibility check. No APT indexes, sources,
+     * dpkg architecture settings or packages are changed by this operation.
+     */
+    private fun checkWinePackages(rootFs: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open a Capsule before checking Wine packages."
+            return
+        }
+        if (isImporting) return
+        if (rootFs.architecture != LinuxRootFsArchitecture.ARM64) {
+            statusMessage = "Wine preflight currently requires an ARM64 Linux RootFS."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Checking existing Wine amd64 package candidates. This is read-only; no packages will be installed."
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val nativeDirectory = File(applicationInfo.nativeLibraryDir)
+                    val proot = ProotExecutableLocator.locate(
+                        nativeLibraryDirectory = nativeDirectory,
+                        supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
+                    ) ?: throw IOException("The Android PRoot executable or static loader is not packaged in this APK.")
+                    val rootFsDirectory = rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        LinuxRootFsArchitecture.ARM64
+                    ) ?: throw IOException("The selected ARM64 RootFS is no longer installed in this Capsule.")
+
+                    val allowedRoots = listOf(
+                        filesDir,
+                        cacheDir,
+                        nativeDirectory,
+                        File("/dev"),
+                        File("/proc")
+                    )
+                    val plan = ProotCommandPlanner.build(
+                        ProotLaunchRequest(
+                            prootExecutable = proot,
+                            nativeLibraryRoot = nativeDirectory,
+                            rootFsDirectory = rootFsDirectory,
+                            rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
+                            guestCommand = "/bin/sh",
+                            guestWorkingDirectory = "/",
+                            arguments = listOf("-c", WinePackagePreflight.createShellScript()),
+                            bindMounts = listOf(
+                                ProotBindMount(File("/dev/null"), "/dev/null"),
+                                ProotBindMount(File("/proc"), "/proc")
+                            ),
+                            allowedHostRoots = allowedRoots
+                        )
+                    )
+                    val supervisor = RuntimeProcessSupervisor(
+                        logDirectory = File(cacheDir, "runtime-logs"),
+                        allowedHostRoots = allowedRoots
+                    )
+                    val process = supervisor.start(
+                        plan = plan,
+                        runId = "wine-preflight-" + System.currentTimeMillis(),
+                        maxLogBytes = 256L * 1024L
+                    ).await(60_000L)
+                    val output = runCatching { process.logFile.readText() }
+                        .getOrDefault("")
+                        .takeLast(12_000)
+                    if (process.timedOut) {
+                        throw IOException("Wine package preflight timed out.\n" + output)
+                    }
+                    if (process.exitCode != 0) {
+                        throw IOException("Wine package preflight shell exited with code " +
+                            process.exitCode + ".\n" + output)
+                    }
+                    WinePackagePreflight.parse(output)
+                }
+                statusMessage = result.summary()
+            } catch (exception: Exception) {
+                statusMessage = "Wine package preflight failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                isImporting = false
+            }
+        }
+    }
 
     private fun buildBox64(rootFs: LinuxRootFsInfo) {
         val capsule = selectedCapsule ?: run {
