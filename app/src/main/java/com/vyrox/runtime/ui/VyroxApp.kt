@@ -977,7 +977,7 @@ internal fun CapsuleExplorerCard(
             }
             Text(drivePath, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             Text(
-                "Files are stored inside this app. These folders are not mounted Windows drives.",
+                "These folders are app-private storage. Once a Wine prefix is verified, Wine uses the same folders as C: and D:.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 style = MaterialTheme.typography.bodySmall
             )

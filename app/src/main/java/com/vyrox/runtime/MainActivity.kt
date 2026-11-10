@@ -1010,7 +1010,7 @@ class MainActivity : ComponentActivity() {
                 val prefix = withContext(Dispatchers.IO) {
                     preparedSetup.manager.finalizeCreation(
                         preparedSetup.ticket,
-                        execution.result.exitCode,
+                        execution.result.exitCode ?: -1,
                         output
                     )
                 }
