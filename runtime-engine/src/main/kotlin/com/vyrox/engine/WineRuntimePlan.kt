@@ -5,22 +5,24 @@ import java.io.FileInputStream
 import java.nio.file.Files
 import java.util.Properties
 
-/**
- * Installs WineHQ stable x86-64 WoW64 into an ARM64 Debian/Ubuntu RootFS.
- * The x86-64 Wine loader is executed by VYROX's pinned ARM64 Box64 binary.
- */
+data class WineInstallationInfo(
+    val version: String,
+    val loaderGuestPath: String,
+    val winebootGuestPath: String
+)
+
+enum class WindowsInstallerKind { EXE, MSI }
+
 object WineRuntimePlan {
     const val WINE_VERSION_MINIMUM_MAJOR = 11
     const val WINEHQ_KEY_URL = "https://dl.winehq.org/wine-builds/winehq.key"
-    const val WINE_BINARY = "/opt/wine-stable/bin/wine"
-    const val WINEBOOT_BINARY = "/opt/wine-stable/bin/wineboot"
     const val METADATA_PATH = "opt/vyrox/wine-stable.properties"
     const val BOX64_BINARY = "/usr/local/bin/box64"
+    const val GUEST_CAPSULE_ROOT = "/mnt/vyrox/capsules"
 
     fun createInstallShellScript(): String = """
         set -eu
         export DEBIAN_FRONTEND=noninteractive
-
         read_os_value() {
             awk -F= -v key="@D@1" '
                 @D@1 == key {
@@ -34,27 +36,14 @@ object WineRuntimePlan {
                 }
             ' /etc/os-release 2>/dev/null | tr -cd 'A-Za-z0-9._-'
         }
-
         OS_ID="@D@(read_os_value ID)"
         OS_CODENAME="@D@(read_os_value VERSION_CODENAME)"
         case "@D@OS_ID:@D@OS_CODENAME" in
-            debian:bookworm|debian:trixie|ubuntu:jammy|ubuntu:noble)
-                ;;
-            *)
-                echo "Unsupported WineHQ RootFS: @D@OS_ID @D@OS_CODENAME. Use Debian 12/13 or Ubuntu 22.04/24.04 ARM64." >&2
-                exit 41
-                ;;
+            debian:bookworm|debian:trixie|ubuntu:jammy|ubuntu:noble) ;;
+            *) echo "Unsupported WineHQ RootFS: @D@OS_ID @D@OS_CODENAME" >&2; exit 41 ;;
         esac
-
-        command -v dpkg >/dev/null 2>&1 || {
-            echo "The selected RootFS is not a Debian/Ubuntu APT system." >&2
-            exit 42
-        }
-        command -v apt-get >/dev/null 2>&1 || {
-            echo "APT is not available in the selected RootFS." >&2
-            exit 43
-        }
-
+        command -v dpkg >/dev/null 2>&1 || { echo "dpkg is missing." >&2; exit 42; }
+        command -v apt-get >/dev/null 2>&1 || { echo "APT is missing." >&2; exit 43; }
         mkdir -p /tmp /etc/apt/keyrings /etc/apt/sources.list.d
         chmod 1777 /tmp
         apt-get update
@@ -62,7 +51,6 @@ object WineRuntimePlan {
         if ! dpkg --print-foreign-architectures | grep -qx amd64; then
             dpkg --add-architecture amd64
         fi
-
         wget -qO- 'https://dl.winehq.org/wine-builds/winehq.key' | gpg --dearmor --yes -o /etc/apt/keyrings/vyrox-winehq.gpg
         chmod 0644 /etc/apt/keyrings/vyrox-winehq.gpg
         cat > /etc/apt/sources.list.d/vyrox-winehq.sources <<EOF
@@ -73,46 +61,43 @@ object WineRuntimePlan {
         Architectures: amd64
         Signed-By: /etc/apt/keyrings/vyrox-winehq.gpg
         EOF
-
         apt-get update
         apt-get install -y --install-recommends winehq-stable
+        apt-get install -y --no-install-recommends xvfb x11vnc fluxbox x11-utils pulseaudio pulseaudio-utils netcat-openbsd icoutils
+        apt-get install -y --no-install-recommends libvulkan1:amd64 mesa-vulkan-drivers:amd64 vulkan-tools:amd64
 
-        BOX64='/usr/local/bin/box64'
-        WINE='/opt/wine-stable/bin/wine'
-        WINEBOOT='/opt/wine-stable/bin/wineboot'
-        test -x "@D@BOX64" || {
-            echo "Build Box64 before installing Wine." >&2
-            exit 44
-        }
-        test -x "@D@WINE" || {
-            echo "WineHQ stable installed without the expected Wine loader at @D@WINE." >&2
-            exit 45
-        }
-        test -x "@D@WINEBOOT" || {
-            echo "WineHQ stable installed without wineboot at @D@WINEBOOT." >&2
-            exit 46
-        }
+        BOX64='@BOX64@'
+        test -x "@D@BOX64" || { echo "Build Box64 before installing Wine." >&2; exit 44; }
+
+        WINE=''
+        for candidate in /usr/lib/wine/wine64 /usr/lib/x86_64-linux-gnu/wine/wine64 /opt/wine-stable/bin/wine64; do
+            if [ -f "@D@candidate" ] && [ -x "@D@candidate" ]; then WINE="@D@candidate"; break; fi
+        done
+        if [ -z "@D@WINE" ]; then
+            WINE="@D@(find /usr/lib /opt -type f -name wine64 -perm /111 -print -quit 2>/dev/null || true)"
+        fi
+        test -n "@D@WINE" && test -x "@D@WINE" || { echo "The x86-64 Wine ELF loader was not found." >&2; exit 45; }
+        WINE="@D@(readlink -f "@D@WINE")"
+
+        WINEBOOT=''
+        for candidate in /usr/lib/x86_64-linux-gnu/wine/x86_64-windows/wineboot.exe /usr/lib/wine/x86_64-windows/wineboot.exe /opt/wine-stable/lib/wine/x86_64-windows/wineboot.exe; do
+            if [ -f "@D@candidate" ]; then WINEBOOT="@D@candidate"; break; fi
+        done
+        if [ -z "@D@WINEBOOT" ]; then
+            WINEBOOT="@D@(find /usr/lib /opt -type f -path '*/x86_64-windows/wineboot.exe' -print -quit 2>/dev/null || true)"
+        fi
+        test -n "@D@WINEBOOT" && test -f "@D@WINEBOOT" || { echo "The Windows wineboot.exe payload was not found." >&2; exit 46; }
 
         WINE_MACHINE="@D@(od -An -tu2 -j18 -N2 "@D@WINE" | tr -d ' ')"
-        WINEBOOT_MACHINE="@D@(od -An -tu2 -j18 -N2 "@D@WINEBOOT" | tr -d ' ')"
-        test "@D@WINE_MACHINE" = "62" || {
-            echo "Wine loader is not an x86-64 Linux ELF executable." >&2
-            exit 47
-        }
-        test "@D@WINEBOOT_MACHINE" = "62" || {
-            echo "wineboot is not an x86-64 Linux ELF executable." >&2
-            exit 48
-        }
+        test "@D@WINE_MACHINE" = "62" || { echo "wine64 is not an x86-64 Linux ELF." >&2; exit 47; }
+        WINEBOOT_MAGIC="@D@(od -An -tx1 -N2 "@D@WINEBOOT" | tr -d ' \n')"
+        test "@D@WINEBOOT_MAGIC" = "4d5a" || { echo "wineboot payload is not a Windows PE file." >&2; exit 48; }
 
-        export BOX64_LD_LIBRARY_PATH='/opt/wine-stable/lib:/opt/wine-stable/lib/wine/x86_64-unix:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu'
+        export BOX64_LD_LIBRARY_PATH='/usr/lib/wine:/usr/lib/x86_64-linux-gnu/wine/x86_64-unix:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu'
         WINE_VERSION_OUTPUT="@D@("@D@BOX64" "@D@WINE" --version 2>&1)"
         printf '%s\n' "@D@WINE_VERSION_OUTPUT"
         WINE_MAJOR="@D@(printf '%s' "@D@WINE_VERSION_OUTPUT" | sed -n 's/^[^0-9]*\([0-9][0-9]*\)\..*/\1/p')"
-        test -n "@D@WINE_MAJOR" && test "@D@WINE_MAJOR" -ge 11 || {
-            echo "Wine 11 or newer is required for the new WoW64 mode." >&2
-            exit 49
-        }
-
+        test -n "@D@WINE_MAJOR" && test "@D@WINE_MAJOR" -ge 11 || { echo "Wine 11 or newer is required." >&2; exit 49; }
         mkdir -p /opt/vyrox
         {
             printf 'version=%s\n' "@D@WINE_VERSION_OUTPUT"
@@ -122,61 +107,199 @@ object WineRuntimePlan {
             printf 'loader=%s\n' "@D@WINE"
             printf 'wineboot=%s\n' "@D@WINEBOOT"
             printf 'source=WineHQ-stable\n'
-            printf 'verified_at_epoch_seconds=%s\n' "@D@(date +%s)"
         } > '/opt/vyrox/wine-stable.properties'
         echo "VYROX_WINE_READY version=@D@WINE_VERSION_OUTPUT wow64=new architecture=x86_64"
-    """.trimIndent().replace("@D@", '$'.toString())
+        if command -v vulkaninfo >/dev/null 2>&1; then
+            vulkaninfo --summary 2>&1 | tail -n 20 || true
+        fi
+    """.trimIndent()
+        .replace("@D@", '$'.toString())
+        .replace("@BOX64@", BOX64_BINARY)
 
-    fun createPrefixShellScript(guestPrefixPath: String): String {
-        require(guestPrefixPath.matches(PREFIX_GUEST_PATH)) {
-            "Wine prefix path is not a VYROX staging path."
-        }
+    fun createPrefixShellScript(guestPrefixPath: String, rootFsDirectory: File): String {
+        require(guestPrefixPath.matches(PREFIX_GUEST_PATH)) { "Invalid VYROX prefix path." }
+        val wine = readInstallation(rootFsDirectory)
+            ?: throw IllegalStateException("A verified Wine 11+ WoW64 installation is required.")
         return """
             set -eu
-            BOX64='/usr/local/bin/box64'
-            WINE='/opt/wine-stable/bin/wine'
-            WINEBOOT='/opt/wine-stable/bin/wineboot'
+            BOX64='@BOX64@'
+            WINE='@WINE@'
+            WINEBOOT='@WINEBOOT@'
             test -x "@D@BOX64"
             test -x "@D@WINE"
-            test -x "@D@WINEBOOT"
-            export BOX64_LD_LIBRARY_PATH='/opt/wine-stable/lib:/opt/wine-stable/lib/wine/x86_64-unix:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu'
+            test -f "@D@WINEBOOT"
+            export BOX64_LD_LIBRARY_PATH='/usr/lib/wine:/usr/lib/x86_64-linux-gnu/wine/x86_64-unix:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu'
             export WINEPREFIX='@PREFIX@'
             export WINEARCH=win64
             export WINEDEBUG=-all
-            "@D@BOX64" "@D@WINEBOOT" -u
+            "@D@BOX64" "@D@WINE" "@D@WINEBOOT" -u
             "@D@BOX64" "@D@WINE" --version
             test -s "@D@WINEPREFIX/system.reg"
             test -s "@D@WINEPREFIX/user.reg"
             echo "VYROX_WINEBOOT_OK"
-        """.trimIndent().replace("@D@", '$'.toString()).replace("@PREFIX@", guestPrefixPath)
+        """.trimIndent()
+            .replace("@D@", '$'.toString())
+            .replace("@BOX64@", BOX64_BINARY)
+            .replace("@WINE@", wine.loaderGuestPath)
+            .replace("@WINEBOOT@", wine.winebootGuestPath)
+            .replace("@PREFIX@", guestPrefixPath)
     }
 
-    fun isInstalled(rootFsDirectory: File): Boolean = runCatching {
-        if (Files.isSymbolicLink(rootFsDirectory.toPath())) return false
+    fun createInteractiveRunScript(
+        guestPrefixPath: String,
+        guestTargetPath: String,
+        kind: WindowsInstallerKind,
+        rootFsDirectory: File
+    ): String {
+        require(guestPrefixPath.matches(PREFIX_GUEST_PATH)) { "Invalid VYROX prefix path." }
+        require(isValidCapsuleGuestFile(guestTargetPath)) { "The program must be inside this Capsule's C: or D: drive." }
+        val wine = readInstallation(rootFsDirectory)
+            ?: throw IllegalStateException("A verified Wine 11+ WoW64 installation is required.")
+        val launchCommand = when (kind) {
+            WindowsInstallerKind.EXE -> "\"\${'$'}BOX64\" \"\${'$'}WINE\" \"\${'$'}TARGET\""
+            WindowsInstallerKind.MSI -> "\"\${'$'}BOX64\" \"\${'$'}WINE\" msiexec /i \"\${'$'}TARGET\""
+        }
+        return """
+            set -eu
+            BOX64='@BOX64@'
+            WINE='@WINE@'
+            TARGET=@TARGET@
+            export BOX64_LD_LIBRARY_PATH='/usr/lib/wine:/usr/lib/x86_64-linux-gnu/wine/x86_64-unix:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu'
+            export WINEPREFIX='@PREFIX@'
+            export WINEARCH=win64
+            export WINEDEBUG=-all
+            export WINEDLLOVERRIDES='mscoree,mshtml='
+            export DISPLAY=:99
+            export PULSE_ALLOW_RUN_AS_ROOT=1
+
+            mkdir -p /tmp/.X11-unix /tmp/pulse-root
+            Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -ac +extension GLX +render -noreset >/tmp/vyrox-xvfb.log 2>&1 &
+            XVFB_PID=@D@!
+            VNC_PID=''
+            FLUXBOX_PID=''
+            AUDIO_PID=''
+            cleanup() {
+                [ -z "@D@AUDIO_PID" ] || kill "@D@AUDIO_PID" 2>/dev/null || true
+                [ -z "@D@VNC_PID" ] || kill "@D@VNC_PID" 2>/dev/null || true
+                [ -z "@D@FLUXBOX_PID" ] || kill "@D@FLUXBOX_PID" 2>/dev/null || true
+                kill "@D@XVFB_PID" 2>/dev/null || true
+                pulseaudio --kill >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT INT TERM
+
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+                xdpyinfo -display :99 >/dev/null 2>&1 && break
+                sleep 1
+            done
+            xdpyinfo -display :99 >/dev/null 2>&1 || { echo "VYROX_X11_FAILED"; exit 60; }
+            fluxbox >/tmp/vyrox-fluxbox.log 2>&1 &
+            FLUXBOX_PID=@D@!
+            x11vnc -display :99 -localhost -nopw -forever -shared -rfbport 5900 -noxdamage -quiet >/tmp/vyrox-vnc.log 2>&1 &
+            VNC_PID=@D@!
+
+            if pulseaudio --start --exit-idle-time=-1 --log-target=file:/tmp/vyrox-pulse.log >/dev/null 2>&1; then
+                if pactl load-module module-null-sink sink_name=vyrox >/dev/null 2>&1; then
+                    (parec --device=vyrox.monitor --raw --format=s16le --rate=48000 --channels=2 2>/dev/null | nc -q 1 127.0.0.1 4472 >/dev/null 2>&1) &
+                    AUDIO_PID=@D@!
+                    echo "VYROX_AUDIO_BRIDGE_STARTED"
+                else
+                    echo "VYROX_AUDIO_BRIDGE_UNAVAILABLE"
+                fi
+            else
+                echo "VYROX_AUDIO_BRIDGE_UNAVAILABLE"
+            fi
+            echo "VYROX_WINDOWS_DESKTOP_READY display=:99 vnc=127.0.0.1:5900"
+            @LAUNCH@
+            RESULT=@D@?
+            echo "VYROX_WINDOWS_PROCESS_EXIT=@D@RESULT"
+            exit "@D@RESULT"
+        """.trimIndent()
+            .replace("@D@", '$'.toString())
+            .replace("@BOX64@", BOX64_BINARY)
+            .replace("@WINE@", wine.loaderGuestPath)
+            .replace("@TARGET@", shellQuote(guestTargetPath))
+            .replace("@PREFIX@", guestPrefixPath)
+            .replace("@LAUNCH@", launchCommand)
+    }
+
+    fun createIconExtractionScript(capsuleId: String): String {
+        require(CAPSULE_ID_PATTERN.matches(capsuleId)) { "Invalid Capsule ID." }
+        val cDrive = "$GUEST_CAPSULE_ROOT/$capsuleId/drive_c"
+        return """
+            set -eu
+            CDRIVE='@CDRIVE@'
+            ICONS="@D@CDRIVE/VYROX/Icons"
+            mkdir -p "@D@ICONS"
+            for root in "@D@CDRIVE/Program Files" "@D@CDRIVE/Program Files (x86)" "@D@CDRIVE/Games"; do
+                [ -d "@D@root" ] || continue
+                find "@D@root" -maxdepth 6 -type f -iname '*.exe' -print
+            done | head -n 250 | while IFS= read -r executable; do
+                [ -f "@D@executable" ] || continue
+                wrestool -x --output="@D@ICONS" -t14 "@D@executable" >/dev/null 2>&1 || true
+            done
+            for icon in "@D@ICONS"/*.ico; do
+                [ -f "@D@icon" ] || continue
+                icotool -x -o "@D@ICONS" "@D@icon" >/dev/null 2>&1 || true
+            done
+            echo "VYROX_ICON_SCAN_COMPLETE"
+        """.trimIndent()
+            .replace("@D@", '$'.toString())
+            .replace("@CDRIVE@", cDrive)
+    }
+
+    fun readInstallation(rootFsDirectory: File): WineInstallationInfo? = runCatching {
+        if (Files.isSymbolicLink(rootFsDirectory.toPath()) || !rootFsDirectory.isDirectory) return null
         val root = rootFsDirectory.canonicalFile
         val metadataFile = File(root, METADATA_PATH)
-        val wine = File(root, WINE_BINARY.removePrefix("/"))
-        val wineboot = File(root, WINEBOOT_BINARY.removePrefix("/"))
-        if (
-            !root.isDirectory ||
-            Files.isSymbolicLink(metadataFile.toPath()) ||
-            !metadataFile.isFile ||
-            Files.isSymbolicLink(wine.toPath()) ||
-            !wine.isFile || !wine.canExecute() ||
-            Files.isSymbolicLink(wineboot.toPath()) ||
-            !wineboot.isFile || !wineboot.canExecute() ||
-            !Box64BuildPlan.isInstalled(root)
-        ) return false
-
+        if (Files.isSymbolicLink(metadataFile.toPath()) || !metadataFile.isFile) return null
         val metadata = Properties()
         metadataFile.inputStream().buffered().use { metadata.load(it) }
-        val major = metadata.getProperty("major")?.toIntOrNull() ?: return false
-        metadata.getProperty("source") == "WineHQ-stable" &&
-            metadata.getProperty("architecture") == "x86_64" &&
-            metadata.getProperty("wow64_mode") == "new" &&
-            major >= WINE_VERSION_MINIMUM_MAJOR &&
-            readElfMachine(wine) == X86_64_ELF_MACHINE &&
-            readElfMachine(wineboot) == X86_64_ELF_MACHINE
+        val major = metadata.getProperty("major")?.toIntOrNull() ?: return null
+        val loaderPath = metadata.getProperty("loader") ?: return null
+        val bootPath = metadata.getProperty("wineboot") ?: return null
+        val loader = resolveGuestFile(root, loaderPath, true) ?: return null
+        val wineboot = resolveGuestFile(root, bootPath, false) ?: return null
+        if (
+            metadata.getProperty("source") != "WineHQ-stable" ||
+            metadata.getProperty("architecture") != "x86_64" ||
+            metadata.getProperty("wow64_mode") != "new" ||
+            major < WINE_VERSION_MINIMUM_MAJOR ||
+            readElfMachine(loader) != X86_64_ELF_MACHINE ||
+            !isWindowsPe(wineboot)
+        ) return null
+        WineInstallationInfo(
+            version = metadata.getProperty("version") ?: return null,
+            loaderGuestPath = toGuestPath(root, loader),
+            winebootGuestPath = toGuestPath(root, wineboot)
+        )
+    }.getOrNull()
+
+    fun isInstalled(rootFsDirectory: File): Boolean =
+        readInstallation(rootFsDirectory) != null && Box64BuildPlan.isInstalled(rootFsDirectory)
+
+    private fun isValidCapsuleGuestFile(path: String): Boolean {
+        if (!path.startsWith("$GUEST_CAPSULE_ROOT/") || path.contains('\u0000') || path.contains('\\')) return false
+        val parts = path.split('/')
+        if (parts.size < 7 || parts.any { it.isBlank() || it == "." || it == ".." }) return false
+        return CAPSULE_ID_PATTERN.matches(parts[4]) && (parts[5] == "drive_c" || parts[5] == "drive_d")
+    }
+
+    private fun resolveGuestFile(root: File, guestPath: String, executable: Boolean): File? {
+        if (!guestPath.startsWith("/") || guestPath.contains("..")) return null
+        val file = File(root, guestPath.removePrefix("/"))
+        if (Files.isSymbolicLink(file.toPath()) || !file.isFile || (executable && !file.canExecute())) return null
+        val canonical = file.canonicalFile
+        return canonical.takeIf { it == root || it.path.startsWith(root.path + File.separator) }
+    }
+
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
+
+    private fun toGuestPath(root: File, file: File): String =
+        "/" + root.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/')
+
+    private fun isWindowsPe(file: File): Boolean = runCatching {
+        FileInputStream(file).use { it.read() == 'M'.code && it.read() == 'Z'.code }
     }.getOrDefault(false)
 
     private fun readElfMachine(file: File): Int? = runCatching {
@@ -190,18 +313,14 @@ object WineRuntimePlan {
             }
         }
         if (
-            header[0] != 0x7F.toByte() ||
-            header[1] != 'E'.code.toByte() ||
-            header[2] != 'L'.code.toByte() ||
-            header[3] != 'F'.code.toByte() ||
-            header[4] != 2.toByte() ||
-            header[5] != 1.toByte()
+            header[0] != 0x7F.toByte() || header[1] != 'E'.code.toByte() ||
+            header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte() ||
+            header[4] != 2.toByte() || header[5] != 1.toByte()
         ) return null
         (header[18].toInt() and 0xFF) or ((header[19].toInt() and 0xFF) shl 8)
     }.getOrNull()
 
-    private val PREFIX_GUEST_PATH = Regex(
-        "/opt/vyrox/prefixes/\\.staging-[0-9a-fA-F-]{36}-[0-9a-fA-F-]{36}"
-    )
+    private val PREFIX_GUEST_PATH = Regex("/opt/vyrox/prefixes/[0-9a-fA-F-]{36}")
+    private val CAPSULE_ID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     private const val X86_64_ELF_MACHINE = 62
 }
