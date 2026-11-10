@@ -40,6 +40,34 @@ class WindowsProgramManagerTest {
     }
 
     @Test
+    fun discoversProgramsInstalledInPerUserAppDataAndDesktopFolders() {
+        val root = Files.createTempDirectory("vyrox-program-manager-user").toFile()
+        try {
+            val storage = CapsuleStorage(File(root, "capsules"))
+            val capsule = storage.createCapsule("User apps")
+            val driveC = storage.getDriveRoot(capsule.id, 'C')!!
+            val localApp = File(driveC, "users/Default/AppData/Local/Programs/Example/Example.exe")
+            check(localApp.parentFile.mkdirs())
+            localApp.writeBytes(byteArrayOf(0x4D, 0x5A))
+            val desktopApp = File(driveC, "users/Default/Desktop/PortableTool.exe")
+            check(desktopApp.parentFile.mkdirs())
+            desktopApp.writeBytes(byteArrayOf(0x4D, 0x5A))
+
+            val programs = WindowsProgramManager(storage).discover(capsule.id)
+
+            assertEquals(
+                setOf(
+                    "users/Default/AppData/Local/Programs/Example/Example.exe",
+                    "users/Default/Desktop/PortableTool.exe"
+                ),
+                programs.map { it.relativePath }.toSet()
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun ignoresSymlinksAndReturnsEmptyWhenCapsuleDoesNotExist() {
         val root = Files.createTempDirectory("vyrox-program-manager-safe").toFile()
         try {
