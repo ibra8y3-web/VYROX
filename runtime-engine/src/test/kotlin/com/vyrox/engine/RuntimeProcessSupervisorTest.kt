@@ -79,7 +79,9 @@ class RuntimeProcessSupervisorTest {
     fun rejectsGuestAttemptsToOverrideDynamicLinkerVariables() {
         val working = temporaryFolder.newFolder("host-env-work")
         val logs = temporaryFolder.newFolder("host-env-logs")
-        val plan = shellPlan(working, listOf("-c", "true")).copy(
+        val plan = shellPlan(
+            working,
+            listOf("-c", "true"),
             environment = mapOf("LD_PRELOAD" to "untrusted.so")
         )
         val supervisor = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/usr")))
@@ -121,10 +123,14 @@ class RuntimeProcessSupervisorTest {
         )
     }
 
-    private fun shellPlan(working: File, arguments: List<String>) = ProotCommandPlan(
+    private fun shellPlan(
+        working: File,
+        arguments: List<String>,
+        environment: Map<String, String> = emptyMap()
+    ) = ProotCommandPlan(
         executable = File("/bin/sh"),
         arguments = arguments,
-        environment = emptyMap(),
+        environment = environment,
         processWorkingDirectory = working,
         nativeLibraryRoot = File("/usr/lib")
     )
