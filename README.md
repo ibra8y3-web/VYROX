@@ -115,7 +115,7 @@ gradle.properties
 LICENSE
 ```
 
-## Security notes
+## PRoot source inventory\n\nThe pinned Android PRoot reference sources and license data are recorded in `third_party/proot-android.lock.json`; CI validates the lock. The source is not built or bundled in the APK yet.\n\n## Security notes
 
 - Imported files are stored in the application's private internal directory and are not executed.
 - The import pipeline accepts only `.exe` and `.msi` filenames and enforces a maximum size.

@@ -41,8 +41,10 @@ jobs:
       - name: Install Android platform and build tools
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
 
-      - name: Test build diagnostic parser
-        run: python3 -m unittest discover -s scripts/tests -p "test_*.py"
+      - name: Test diagnostics and pinned source manifests
+        run: |
+          python3 -m unittest discover -s scripts/tests -p "test_*.py"
+          python3 scripts/check_proot_manifest.py
 
       - name: Run unit tests, lint, and assemble debug APK
         run: |

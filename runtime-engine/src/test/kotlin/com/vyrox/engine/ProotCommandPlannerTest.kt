@@ -50,6 +50,7 @@ class ProotCommandPlannerTest {
             ProotCommandPlanner.build(
                 ProotLaunchRequest(
                     prootExecutable = File(root, "missing-proot"),
+                    nativeLibraryRoot = root,
                     rootFsDirectory = root,
                     rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
                     guestCommand = "/bin/sh",

@@ -11,12 +11,15 @@ Android reference fork: https://github.com/termux/proot
 Termux package build files: https://github.com/termux/termux-packages/tree/master/packages/proot
 
 The initial Android source candidate is pinned in
-`third_party/proot-sources.lock.json`:
+`third_party/proot-android.lock.json`:
 
 - Termux PRoot `v5.1.107.102`, commit
-  `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, GPL-2.0-or-later.
+  `52d65a4dc140ca554d241a1438ddd4f6b00c9813`, Termux package label GPL-2.0.
 - `libandroid-shmem` `0.7`, BSD-3-Clause.
-- `libtalloc` `2.5.0`, GPL-3.0.
+- `libtalloc` `2.5.0`: its shared library source is identified as
+  LGPL-3.0-or-later, while the Termux package recipe labels the package GPL-3.0.
+  Preserve both declarations pending review of the exact distributed files
+  and notices.
 
 The Termux package recipe declares PRoot dependencies on
 `libandroid-shmem` and `libtalloc`, enables the Android shared-memory
@@ -85,16 +88,21 @@ loader or implement a relocatable loader directory and test it.
 
 ## Required next steps
 
-1. Build the pinned sources for `arm64-v8a` with the Android NDK/Bionic
-   toolchain, including the exact Termux patches and dependency versions.
-2. Build it for `arm64-v8a` with the Android NDK/Bionic toolchain, including all
-   required Termux patches and dependencies.
-3. Audit GPL-2.0-or-later obligations and preserve notices and corresponding
-   source availability for the exact packaged build.
-4. Package it in an executable location compatible with Android's linker and
-   app storage execution policy.
-5. Test PRoot on physical Android 12+ devices: `ptrace` permission, SELinux
-   behavior, bind mounts, signal handling, process exit, and storage paths.
+1. Reproduce the pinned Termux PRoot build recipe, including the exact Termux
+   patches and both dependencies, with the Android NDK/Bionic toolchain.
+2. Review the exact source files, package labels, notices, and distribution
+   obligations for PRoot, libtalloc, and libandroid-shmem.
+3. Produce an ARM64 PIE executable and its required shared libraries. Package
+   them under `app/src/main/jniLibs/arm64-v8a/` (the executable filename is
+   `libproot.so`) and keep `useLegacyPackaging` enabled so the payload is
+   extracted into `applicationInfo.nativeLibraryDir`.
+4. Verify the extracted file is a 64-bit little-endian AArch64 PIE executable,
+   its dynamic dependencies resolve from approved packaged/system paths, and
+   it cannot be replaced by app code after installation.
+5. Test `execve()` and PRoot startup on physical Android 12+ devices. Capture
+   device model, Android build, target SDK, ABI, exit status, and logs.
+6. Test PRoot `ptrace`, SELinux behavior, bind mounts, signals, process exit,
+   and storage paths on physical devices.
 7. Run a harmless ARM64 Linux command such as `/bin/echo` inside an imported
    RootFS and capture stdout, stderr, exit code, and exact device/build details.
 8. Only after that gate passes, add Wine ARM64 to the RootFS and test
