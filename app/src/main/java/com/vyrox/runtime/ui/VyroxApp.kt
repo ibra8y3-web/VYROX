@@ -1495,6 +1495,9 @@ internal fun InstallerRow(
     onInstall: (ImportedInstaller) -> Unit,
     onDelete: (ImportedInstaller) -> Unit
 ) {
+    val extension = installer.displayName.substringAfterLast('.', "").lowercase()
+    val architectureSupported = extension == "msi" ||
+        installer.architectureLabel in setOf("x86", "x86-64")
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1525,7 +1528,7 @@ internal fun InstallerRow(
                 if (installer.displayName.substringAfterLast('.', "").lowercase() in setOf("exe", "msi")) {
                     Button(
                         onClick = { onInstall(installer) },
-                        enabled = canInstall
+                        enabled = canInstall && architectureSupported
                     ) {
                         Text(vxText("Install"))
                     }
