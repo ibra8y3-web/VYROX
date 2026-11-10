@@ -73,6 +73,9 @@ fun VyroxApp(
     box64Installed: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     isImporting: Boolean,
+    activeRuntimeLabel: String?,
+    isStoppingRuntimeProcess: Boolean,
+    onStopRuntimeProcess: () -> Unit,
     statusMessage: String?,
     isDesktopMode: Boolean,
     onToggleDesktopMode: () -> Unit,
@@ -140,6 +143,9 @@ fun VyroxApp(
                     box64Installed = box64Installed,
                     winePrefixInfo = winePrefixInfo,
                     isImporting = isImporting,
+                    activeRuntimeLabel = activeRuntimeLabel,
+                    isStoppingRuntimeProcess = isStoppingRuntimeProcess,
+                    onStopRuntimeProcess = onStopRuntimeProcess,
                     statusMessage = statusMessage,
                     capsuleName = capsuleName,
                     onCapsuleNameChange = { capsuleName = it },
@@ -216,6 +222,13 @@ fun VyroxApp(
                 }
 
 
+                activeRuntimeLabel?.let { label ->
+                    ActiveRuntimeOperationCard(
+                        label = label,
+                        isStopping = isStoppingRuntimeProcess,
+                        onStop = onStopRuntimeProcess
+                    )
+                }
                 HostReadinessCard(hostCapabilities)
                 RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
 
@@ -581,6 +594,39 @@ fun VyroxApp(
 
 
 @Composable
+@Composable
+internal fun ActiveRuntimeOperationCard(
+    label: String,
+    isStopping: Boolean,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Active runtime operation", fontWeight = FontWeight.SemiBold)
+                Text(label, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(
+                onClick = onStop,
+                enabled = !isStopping
+            ) {
+                Text(if (isStopping) "Stopping…" else "Stop")
+            }
+        }
+    }
+}
+
 internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,

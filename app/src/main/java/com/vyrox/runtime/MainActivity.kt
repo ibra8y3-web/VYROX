@@ -34,6 +34,9 @@ import com.vyrox.engine.ProotCommandPlanner
 import com.vyrox.engine.ProotBindMount
 import com.vyrox.engine.ProotLaunchRequest
 import com.vyrox.engine.RuntimeProcessSupervisor
+import com.vyrox.engine.ManagedRuntimeProcess
+import com.vyrox.engine.RuntimeProcessResult
+import com.vyrox.engine.ProotCommandPlan
 import com.vyrox.runtime.ui.VyroxApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -70,6 +73,10 @@ class MainActivity : ComponentActivity() {
 
     private var isImporting by mutableStateOf(false)
     private var statusMessage by mutableStateOf<String?>(null)
+    private var activeRuntimeProcess by mutableStateOf<ManagedRuntimeProcess?>(null)
+    private var activeRuntimeLabel by mutableStateOf<String?>(null)
+    private var isStoppingRuntimeProcess by mutableStateOf(false)
+    private var runtimeStopRequested = false
 
     private val openInstaller = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -145,6 +152,9 @@ class MainActivity : ComponentActivity() {
                 box64Installed = box64Installed,
                 winePrefixInfo = winePrefixInfo,
                 isImporting = isImporting,
+                activeRuntimeLabel = activeRuntimeLabel,
+                isStoppingRuntimeProcess = isStoppingRuntimeProcess,
+                onStopRuntimeProcess = ::stopRuntimeProcess,
                 statusMessage = statusMessage,
                 isDesktopMode = desktopModeEnabled,
                 onToggleDesktopMode = {
@@ -767,9 +777,9 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             isImporting = true
-            statusMessage = "Checking existing Wine amd64 package candidates. This is read-only; no packages will be installed."
+            statusMessage = "Checking existing Wine package candidates. This is read-only."
             try {
-                val result = withContext(Dispatchers.IO) {
+                val plan = withContext(Dispatchers.IO) {
                     val nativeDirectory = File(applicationInfo.nativeLibraryDir)
                     val proot = ProotExecutableLocator.locate(
                         nativeLibraryDirectory = nativeDirectory,
@@ -787,7 +797,7 @@ class MainActivity : ComponentActivity() {
                         File("/dev"),
                         File("/proc")
                     )
-                    val plan = ProotCommandPlanner.build(
+                    ProotCommandPlanner.build(
                         ProotLaunchRequest(
                             prootExecutable = proot,
                             nativeLibraryRoot = nativeDirectory,
@@ -803,28 +813,29 @@ class MainActivity : ComponentActivity() {
                             allowedHostRoots = allowedRoots
                         )
                     )
-                    val supervisor = RuntimeProcessSupervisor(
-                        logDirectory = File(cacheDir, "runtime-logs"),
-                        allowedHostRoots = allowedRoots
-                    )
-                    val process = supervisor.start(
-                        plan = plan,
-                        runId = "wine-preflight-" + System.currentTimeMillis(),
-                        maxLogBytes = 256L * 1024L
-                    ).await(60_000L)
-                    val output = runCatching { process.logFile.readText() }
+                }
+                val execution = runManagedRuntimeProcess(
+                    plan = plan,
+                    runId = "wine-preflight-" + System.currentTimeMillis(),
+                    maxLogBytes = 256L * 1024L,
+                    timeoutMillis = 60_000L,
+                    label = "Wine package compatibility check"
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
                         .getOrDefault("")
                         .takeLast(12_000)
-                    if (process.timedOut) {
-                        throw IOException("Wine package preflight timed out.\n" + output)
-                    }
-                    if (process.exitCode != 0) {
-                        throw IOException("Wine package preflight shell exited with code " +
-                            process.exitCode + ".\n" + output)
-                    }
-                    WinePackagePreflight.parse(output)
                 }
-                statusMessage = result.summary()
+                statusMessage = when {
+                    execution.stoppedByUser ->
+                        "Wine package preflight stopped by you. No packages were changed.\n" + output
+                    execution.result.timedOut ->
+                        "Wine package preflight timed out.\n" + output
+                    execution.result.exitCode != 0 ->
+                        "Wine package preflight shell exited with code " +
+                            execution.result.exitCode + ".\n" + output
+                    else -> WinePackagePreflight.parse(output).summary()
+                }
             } catch (exception: Exception) {
                 statusMessage = "Wine package preflight failed: " +
                     (exception.message ?: exception.javaClass.simpleName)
@@ -848,9 +859,10 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             isImporting = true
             box64Installed = false
-            statusMessage = "Building pinned Box64 0.4.4 inside this Capsule's ARM64 Linux RootFS. Build dependencies will be installed inside that RootFS."
+            statusMessage = "Building pinned Box64 0.4.4 inside this Capsule's ARM64 Linux RootFS."
+            var prepared: Triple<ProotCommandPlan, File, File>? = null
             try {
-                val buildResult = withContext(Dispatchers.IO) {
+                prepared = withContext(Dispatchers.IO) {
                     val nativeDirectory = File(applicationInfo.nativeLibraryDir)
                     val proot = ProotExecutableLocator.locate(
                         nativeLibraryDirectory = nativeDirectory,
@@ -861,16 +873,9 @@ class MainActivity : ComponentActivity() {
                         LinuxRootFsArchitecture.ARM64
                     ) ?: throw IOException("The selected ARM64 RootFS is no longer installed in this Capsule.")
 
-                    val resolverConfig = createGuestResolverConfiguration()
+                    var resolver: File? = null
                     try {
-                        val systemBinds = listOf(
-                            ProotBindMount(File("/dev/null"), "/dev/null"),
-                            ProotBindMount(File("/dev/zero"), "/dev/zero"),
-                            ProotBindMount(File("/dev/urandom"), "/dev/urandom"),
-                            ProotBindMount(File("/dev/random"), "/dev/random"),
-                            ProotBindMount(File("/proc"), "/proc"),
-                            ProotBindMount(resolverConfig, "/etc/resolv.conf")
-                        )
+                        resolver = createGuestResolverConfiguration()
                         val approvedRoots = listOf(
                             filesDir,
                             cacheDir,
@@ -888,56 +893,133 @@ class MainActivity : ComponentActivity() {
                                 guestWorkingDirectory = "/",
                                 arguments = listOf("-c", Box64BuildPlan.createShellScript()),
                                 fakeRoot = true,
-                                bindMounts = systemBinds,
+                                bindMounts = listOf(
+                                    ProotBindMount(File("/dev/null"), "/dev/null"),
+                                    ProotBindMount(File("/dev/zero"), "/dev/zero"),
+                                    ProotBindMount(File("/dev/urandom"), "/dev/urandom"),
+                                    ProotBindMount(File("/dev/random"), "/dev/random"),
+                                    ProotBindMount(File("/proc"), "/proc"),
+                                    ProotBindMount(resolver, "/etc/resolv.conf")
+                                ),
                                 allowedHostRoots = approvedRoots
                             )
                         )
-                        val supervisor = RuntimeProcessSupervisor(
-                            logDirectory = File(cacheDir, "runtime-logs"),
-                            allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
-                        )
-                        val result = supervisor.start(
-                            plan = plan,
-                            runId = "box64-build-" + System.currentTimeMillis(),
-                            maxLogBytes = 8L * 1024L * 1024L
-                        ).await(60L * 60L * 1000L)
-                        val output = runCatching { result.logFile.readText() }
-                            .getOrDefault("Runtime build log could not be read.")
-                            .takeLast(12_000)
-                        Triple(result, output, Box64BuildPlan.isInstalled(rootFsDirectory))
-                    } finally {
-                        resolverConfig.delete()
+                        Triple(plan, rootFsDirectory, resolver)
+                    } catch (exception: Exception) {
+                        resolver?.delete()
+                        throw exception
                     }
                 }
 
-                val result = buildResult.first
-                val output = buildResult.second
-                val verified = buildResult.third
-                box64Installed = result.exitCode == 0 &&
-                    !result.timedOut &&
+                val work = prepared ?: throw IOException("Box64 build request was not prepared.")
+                val execution = runManagedRuntimeProcess(
+                    plan = work.first,
+                    runId = "box64-build-" + System.currentTimeMillis(),
+                    maxLogBytes = 8L * 1024L * 1024L,
+                    timeoutMillis = 60L * 60L * 1000L,
+                    label = "Build Box64 0.4.4"
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
+                        .getOrDefault("Runtime build log could not be read.")
+                        .takeLast(12_000)
+                }
+                val verified = withContext(Dispatchers.IO) {
+                    Box64BuildPlan.isInstalled(work.second)
+                }
+                box64Installed = !execution.stoppedByUser &&
+                    execution.result.exitCode == 0 &&
+                    !execution.result.timedOut &&
                     verified &&
                     output.contains("VYROX_BOX64_READY")
-                statusMessage = if (box64Installed) {
-                    "Box64 0.4.4 was built inside this Capsule and passed a minimal x86-64 Linux syscall smoke test. Real application workloads and Windows EXE/MSI execution remain unverified.\n" + output
-                } else {
-                    "Box64 build did not pass its exit-code, version-marker and installed-ELF checks.\n" + output
+                statusMessage = when {
+                    execution.stoppedByUser ->
+                        "Box64 build was stopped by you. It is not marked as installed.\n" + output
+                    box64Installed ->
+                        "Box64 0.4.4 was built and passed a minimal x86-64 Linux syscall smoke test. Real application workloads and Windows EXE/MSI execution remain unverified.\n" + output
+                    execution.result.timedOut ->
+                        "Box64 build timed out and was stopped. It is not marked as installed.\n" + output
+                    else ->
+                        "Box64 build did not pass its exit-code, version-marker and installed-ELF checks.\n" + output
                 }
             } catch (exception: Exception) {
                 box64Installed = false
                 statusMessage = "Box64 build failed: " +
                     (exception.message ?: exception.javaClass.simpleName)
             } finally {
+                withContext(Dispatchers.IO) { prepared?.third?.delete() }
                 isImporting = false
                 refreshRootFsImages()
             }
         }
     }
 
-    /**
-     * Supplies only DNS server addresses exposed by Android's active network.
-     * The file lives in app-private cache and is mounted read-only by PRoot's
-     * path redirection for this Box64 build process only.
-     */
+    private suspend fun runManagedRuntimeProcess(
+        plan: ProotCommandPlan,
+        runId: String,
+        maxLogBytes: Long,
+        timeoutMillis: Long,
+        label: String
+    ): RuntimeProcessExecution {
+        val nativeDirectory = File(applicationInfo.nativeLibraryDir)
+        val supervisor = RuntimeProcessSupervisor(
+            logDirectory = File(cacheDir, "runtime-logs"),
+            allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
+        )
+        // Starting PRoot is a short host operation, but make it non-cancellable
+        // so a process handle is always returned to this method and can be
+        // terminated from finally if the Activity is cancelled immediately.
+        val process = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+            supervisor.start(plan, runId, maxLogBytes)
+        }
+
+        var completedNormally = false
+        try {
+            activeRuntimeProcess = process
+            activeRuntimeLabel = label
+            isStoppingRuntimeProcess = false
+            runtimeStopRequested = false
+
+            val result = withContext(Dispatchers.IO) {
+                process.await(timeoutMillis)
+            }
+            completedNormally = true
+            return RuntimeProcessExecution(result, runtimeStopRequested)
+        } finally {
+            if (!completedNormally && process.isRunning) {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+                    process.terminate()
+                }
+            }
+            if (activeRuntimeProcess === process) {
+                activeRuntimeProcess = null
+                activeRuntimeLabel = null
+                isStoppingRuntimeProcess = false
+            }
+        }
+    }
+
+    private fun stopRuntimeProcess() {
+        val process = activeRuntimeProcess ?: return
+        if (isStoppingRuntimeProcess || !process.isRunning) return
+
+        runtimeStopRequested = true
+        isStoppingRuntimeProcess = true
+        statusMessage = "Stopping " + (activeRuntimeLabel ?: "the runtime process") + "..."
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    process.terminate()
+                }
+            } catch (exception: Exception) {
+                statusMessage = "Could not stop the runtime process: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                isStoppingRuntimeProcess = false
+            }
+        }
+    }
+
     private fun createGuestResolverConfiguration(): File {
         val connectivity = getSystemService(ConnectivityManager::class.java)
             ?: throw IOException("Android network state service is unavailable.")
@@ -990,19 +1072,18 @@ class MainActivity : ComponentActivity() {
             isImporting = true
             statusMessage = "Starting a real PRoot shell probe..."
             try {
-                val result = withContext(Dispatchers.IO) {
+                val plan = withContext(Dispatchers.IO) {
                     val nativeDirectory = File(applicationInfo.nativeLibraryDir)
                     val proot = ProotExecutableLocator.locate(
                         nativeLibraryDirectory = nativeDirectory,
                         supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
                     ) ?: throw IOException("The Android PRoot executable or static loader is not packaged in this APK.")
-
                     val rootFsDirectory = rootFsManager.getRootFsDirectory(
                         capsule.id,
                         rootFs.architecture
                     ) ?: throw IOException("The selected Linux RootFS is no longer installed in this Capsule.")
 
-                    val plan = ProotCommandPlanner.build(
+                    ProotCommandPlanner.build(
                         ProotLaunchRequest(
                             prootExecutable = proot,
                             nativeLibraryRoot = nativeDirectory,
@@ -1010,34 +1091,30 @@ class MainActivity : ComponentActivity() {
                             rootFsArchitecture = rootFs.architecture,
                             guestCommand = "/bin/sh",
                             guestWorkingDirectory = "/",
-                            arguments = listOf(
-                                "-c",
-                                "printf VYROX_ROOTFS_OK; uname -m; id"
-                            ),
-                            allowedHostRoots = listOf(
-                                filesDir,
-                                cacheDir,
-                                nativeDirectory
-                            )
+                            arguments = listOf("-c", "printf VYROX_ROOTFS_OK; uname -m; id"),
+                            allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
                         )
                     )
-                    val supervisor = RuntimeProcessSupervisor(
-                        logDirectory = File(cacheDir, "runtime-logs"),
-                        allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
-                    )
-                    supervisor.start(
-                        plan = plan,
-                        runId = "rootfs-probe-" + System.currentTimeMillis(),
-                        maxLogBytes = 256L * 1024L
-                    ).await(30_000L)
                 }
-
-                val output = runCatching { result.logFile.readText() }
-                    .getOrDefault("Runtime log could not be read.")
-                    .takeLast(8_000)
-                statusMessage = "PRoot shell exit: " + result.exitCode +
-                    " • timeout: " + result.timedOut +
-                    " • duration: " + result.durationMillis + " ms\n" + output
+                val execution = runManagedRuntimeProcess(
+                    plan = plan,
+                    runId = "rootfs-probe-" + System.currentTimeMillis(),
+                    maxLogBytes = 256L * 1024L,
+                    timeoutMillis = 30_000L,
+                    label = "Linux RootFS shell probe"
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
+                        .getOrDefault("Runtime log could not be read.")
+                        .takeLast(8_000)
+                }
+                statusMessage = if (execution.stoppedByUser) {
+                    "PRoot shell probe was stopped by you.\n" + output
+                } else {
+                    "PRoot shell exit: " + execution.result.exitCode +
+                        " • timeout: " + execution.result.timedOut +
+                        " • duration: " + execution.result.durationMillis + " ms\n" + output
+                }
             } catch (exception: Exception) {
                 statusMessage = "PRoot shell test failed: " +
                     (exception.message ?: exception.javaClass.simpleName)
@@ -1068,6 +1145,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private data class RuntimeProcessExecution(
+        val result: RuntimeProcessResult,
+        val stoppedByUser: Boolean
+    )
 
     private data class CapsuleImportTarget(
         val capsuleId: String,

@@ -87,6 +87,9 @@ internal fun DesktopShell(
     box64Installed: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     isImporting: Boolean,
+    activeRuntimeLabel: String?,
+    isStoppingRuntimeProcess: Boolean,
+    onStopRuntimeProcess: () -> Unit,
     statusMessage: String?,
     capsuleName: String,
     onCapsuleNameChange: (String) -> Unit,
@@ -156,6 +159,14 @@ internal fun DesktopShell(
                 .fillMaxSize()
                 .background(Color(0xFF080D18))
         ) {
+            activeRuntimeLabel?.let { label ->
+                ActiveRuntimeOperationCard(
+                    label = label,
+                    isStopping = isStoppingRuntimeProcess,
+                    onStop = onStopRuntimeProcess,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

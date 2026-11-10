@@ -34,7 +34,7 @@
 | File manager | Browse, create, import, copy, move, rename, search, delete and safely extract ZIP archives within Capsule storage |
 | Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
 | Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
-| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning, bounded process logs and a pinned Box64 0.4.4 source-build action inside an ARM64 glibc RootFS |
+| Runtime management | PRoot session start/timeout/stop for Wine package preflight, Box64 build and Linux RootFS shell probe; bounded logs and a visible Stop control |\n| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning and pinned Box64 0.4.4 source-build action inside an ARM64 glibc RootFS |
 | Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging; Box64 has a separate in-RootFS source-build recipe (not an APK library) |
 
 **Source implementation is not the same as verified runtime behavior.** The CI badge reports the latest GitHub Actions result. Native execution and Windows compatibility still require successful Android builds and physical-device testing.

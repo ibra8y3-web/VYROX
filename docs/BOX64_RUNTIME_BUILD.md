@@ -39,7 +39,7 @@ The official upstream compilation notes explain the ARM64/PRoot flags and DynaRe
 
 ## Network, storage and performance
 
-The build needs a working network connection for APT and Git and sufficient free space for compilers, source, build objects and installed libraries. It can use substantial RAM and storage and is not guaranteed to finish on every phone. The app limits the runtime log to 8 MiB and the build process to one hour.
+The build needs a working network connection for APT and Git and sufficient free space for compilers, source, build objects and installed libraries. It can use substantial RAM and storage and is not guaranteed to finish on every phone. The app limits the runtime log to 8 MiB and the build process to one hour. The active build is shown in the phone and desktop UI with a Stop action that terminates the managed PRoot process; an interrupted build is not stamped as a successful Box64 installation.
 
 ## Verified versus not yet verified
 

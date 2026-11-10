@@ -7,6 +7,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 class RuntimeProcessSupervisorTest {
     @get:Rule
@@ -41,6 +42,36 @@ class RuntimeProcessSupervisorTest {
 
         assertTrue(result.timedOut)
         assertFalse(result.exitCode == 0)
+    }
+
+    @Test
+    fun canStopAnActiveRuntimeProcessWhileAwaitIsWaiting() {
+        val working = temporaryFolder.newFolder("manual-stop-work")
+        val logs = temporaryFolder.newFolder("manual-stop-logs")
+        val process = RuntimeProcessSupervisor(
+            logs,
+            listOf(temporaryFolder.root, File("/usr"))
+        ).start(
+            shellPlan(working, listOf("-c", "exec sleep 10")),
+            "manual-stop-run"
+        )
+        val resultRef = AtomicReference<RuntimeProcessResult?>()
+        val waiter = Thread {
+            resultRef.set(process.await(10_000))
+        }.apply { start() }
+
+        Thread.sleep(150)
+        assertTrue(process.isRunning)
+        process.terminate()
+        waiter.join(5_000)
+
+        assertFalse(waiter.isAlive)
+        assertFalse(process.isRunning)
+        val result = resultRef.get()
+        org.junit.Assert.assertNotNull(result)
+        assertFalse(result!!.timedOut)
+        assertFalse(result.exitCode == 0)
+        assertTrue(result.logFile.isFile)
     }
 
     @Test
