@@ -268,7 +268,8 @@ fun VyroxApp(
                         },
                         onImportFile = onImportIntoCapsule,
                         onClose = onCloseCapsuleExplorer,
-                        onRequestDelete = { pendingDeleteEntry = it }
+                        onRequestDelete = { pendingDeleteEntry = it },
+                         onExtractZipEntry = onExtractZipEntry
                     )
                 }
 
@@ -283,7 +284,7 @@ fun VyroxApp(
                     ) {
                         Text("Foundation build", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
-                            "This version imports EXE and MSI installer files into private app storage. It does not run Windows applications yet.",
+                            "Imports EXE/MSI installers and ZIP archives into private app storage. ZIP extraction is confined to a selected Capsule; Windows executables are not run yet.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
                         )
                         Button(
