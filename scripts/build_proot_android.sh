@@ -109,6 +109,7 @@ done
 # RuntimeProcessSupervisor instead of a shared global temporary directory.
 python3 "$ROOT/scripts/patch_android_shmem.py" \
   --proot-source "$PROOT_SRC/src/extension/ashmem_memfd/ashmem_memfd.c" \
+  --sysvipc-source "$PROOT_SRC/src/extension/sysvipc/sysvipc_shm.c" \
   "$SHMEM_SRC/shmem.c"
 
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"

@@ -4,10 +4,12 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.Locale
+import java.util.zip.ZipFile
 
 enum class WindowsBinaryFormat(val label: String) {
     PORTABLE_EXECUTABLE("Windows PE executable"),
-    MSI_COMPOUND_DATABASE("MSI compound database")
+    MSI_COMPOUND_DATABASE("MSI compound database"),
+    PORTABLE_ZIP_ARCHIVE("Portable ZIP archive")
 }
 
 enum class WindowsArchitecture(val label: String) {
@@ -44,7 +46,8 @@ object WindowsBinaryInspector {
         return when (displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
             "exe" -> inspectPortableExecutable(file)
             "msi" -> inspectMsiDatabase(file)
-            else -> throw IOException("Only .exe and .msi files are supported.")
+            "zip" -> inspectPortableZipArchive(file)
+            else -> throw IOException("Only .exe, .msi, and .zip files are supported.")
         }
     }
 
@@ -95,6 +98,54 @@ object WindowsBinaryInspector {
             )
         }
 
+    private fun inspectPortableZipArchive(file: File): WindowsBinaryInspection {
+        if (file.length() < MIN_ZIP_BYTES) {
+            throw IOException("The ZIP archive is too small to contain a valid directory.")
+        }
+
+        ZipFile(file).use { archive ->
+            val entries = archive.entries()
+            var entryCount = 0
+            var expandedBytes = 0L
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                entryCount += 1
+                if (entryCount > MAX_ZIP_ENTRIES) {
+                    throw IOException("The ZIP archive contains too many entries.")
+                }
+
+                val normalized = entry.name.replace('\\', '/')
+                if (
+                    normalized.startsWith("/") ||
+                    normalized.contains(':') ||
+                    entry.name.any { it.code == 0 }
+                ) {
+                    throw IOException("The ZIP archive contains an absolute or invalid path.")
+                }
+                val path = normalized.removeSuffix("/")
+                val segments = path.split('/')
+                if (path.isBlank() || segments.any { it.isBlank() || it == "." || it == ".." }) {
+                    throw IOException("The ZIP archive contains a path traversal entry.")
+                }
+
+                val entrySize = entry.size
+                if (entrySize < 0L || entrySize > MAX_ZIP_UNCOMPRESSED_BYTES - expandedBytes) {
+                    throw IOException("The ZIP archive exceeds the safe expanded-size limit.")
+                }
+                expandedBytes += entrySize
+            }
+
+            if (entryCount == 0) {
+                throw IOException("The ZIP archive is empty.")
+            }
+        }
+
+        return WindowsBinaryInspection(
+            format = WindowsBinaryFormat.PORTABLE_ZIP_ARCHIVE,
+            architecture = WindowsArchitecture.UNKNOWN
+        )
+    }
+
     private fun inspectMsiDatabase(file: File): WindowsBinaryInspection =
         RandomAccessFile(file, "r").use { input ->
             val signature = ByteArray(MSI_COMPOUND_SIGNATURE.size)
@@ -135,6 +186,9 @@ object WindowsBinaryInspector {
         return value
     }
 
+    private const val MIN_ZIP_BYTES = 22L
+    private const val MAX_ZIP_ENTRIES = 10_000
+    private const val MAX_ZIP_UNCOMPRESSED_BYTES = 2L * 1024L * 1024L * 1024L
     private const val MAX_PE_HEADER_OFFSET = 16L * 1024L * 1024L
     private const val PE32_MAGIC = 0x10B
     private const val PE32_PLUS_MAGIC = 0x20B

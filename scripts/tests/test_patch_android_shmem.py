@@ -55,6 +55,21 @@ void test(void) {
         with self.assertRaises(ValueError):
             patch_proot_memfd_source("#include <stdio.h>\n")
 
+    def test_uses_public_libandroid_shmem_declarations_in_proot(self):
+        from scripts.patch_android_shmem import patch_proot_sysvipc_source
+
+        upstream = "#if defined(WITH_LIBANDROID_SHMEM)\\n#include <sys/shm.h>\\n#endif\\n"
+        patched = patch_proot_sysvipc_source(upstream)
+        self.assertIn("#include <shm.h>", patched)
+        self.assertNotIn("#include <sys/shm.h>", patched)
+        self.assertEqual(patched, patch_proot_sysvipc_source(patched))
+
+    def test_rejects_unexpected_sysvipc_source(self):
+        from scripts.patch_android_shmem import patch_proot_sysvipc_source
+
+        with self.assertRaises(ValueError):
+            patch_proot_sysvipc_source("#include <stdio.h>\\n")
+
 
 if __name__ == "__main__":
     unittest.main()

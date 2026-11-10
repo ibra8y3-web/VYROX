@@ -65,6 +65,16 @@ def patch_proot_memfd_source(source: str) -> str:
     return source.replace(expected, expected + "\n" + include, 1)
 
 
+def patch_proot_sysvipc_source(source: str) -> str:
+    expected = "#include <sys/shm.h>"
+    replacement = "#include <shm.h>"
+    if replacement in source:
+        return source
+    if source.count(expected) != 1:
+        raise ValueError("Pinned PRoot SysV shared-memory source no longer has the expected system header.")
+    return source.replace(expected, replacement, 1)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path, help="Path to the extracted upstream shmem.c")
@@ -74,11 +84,18 @@ def main() -> int:
         required=True,
         help="Path to the extracted PRoot ashmem_memfd.c",
     )
+    parser.add_argument(
+        "--sysvipc-source",
+        type=Path,
+        required=True,
+        help="Path to the extracted PRoot sysvipc_shm.c",
+    )
     args = parser.parse_args()
 
     for source_path, patch_function in (
         (args.source, patch_source),
         (args.proot_source, patch_proot_memfd_source),
+        (args.sysvipc_source, patch_proot_sysvipc_source),
     ):
         if not source_path.is_file():
             parser.error(f"Source file does not exist: {source_path}")
@@ -88,6 +105,7 @@ def main() -> int:
 
     print(f"Prepared Android app-private TMPDIR support in {args.source}")
     print(f"Added the missing standard string declarations in {args.proot_source}")
+    print(f"Connected PRoot to libandroid-shmem declarations in {args.sysvipc_source}")
     return 0
 
 

@@ -3,7 +3,7 @@ package com.vyrox.runtime.core.files
 import java.util.Locale
 
 object InstallerPolicy {
-    private val supportedExtensions = setOf("exe", "msi")
+    private val supportedExtensions = setOf("exe", "msi", "zip")
 
     fun isSupportedInstaller(displayName: String): Boolean {
         val extension = displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -12,7 +12,7 @@ object InstallerPolicy {
 
     fun requireSupportedInstaller(displayName: String) {
         require(isSupportedInstaller(displayName)) {
-            "Choose a Windows installer ending in .exe or .msi."
+            "Choose an EXE/MSI Windows installer or a ZIP portable-program archive."
         }
     }
 

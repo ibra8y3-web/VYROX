@@ -9,6 +9,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class CapsuleStorageTest {
     @get:Rule
@@ -216,6 +218,70 @@ class CapsuleStorageTest {
             nameRejected = true
         }
         assertTrue(nameRejected)
+    }
+
+    @Test
+    fun extractsZipArchiveInsideTheSelectedCapsuleDrive() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Portable apps")
+        val drive = requireNotNull(storage.getDriveRoot(capsule.id, 'D'))
+        val archiveBytes = createZip(
+            "portable/launcher.exe" to "MZ-binary".toByteArray(),
+            "portable/data/config.ini" to "ready=true".toByteArray()
+        )
+        val archive = storage.importFile(
+            capsule.id,
+            'D',
+            "Downloads",
+            "portable.zip",
+            ByteArrayInputStream(archiveBytes)
+        )
+
+        val extracted = storage.extractZipArchive(capsule.id, 'D', archive.relativePath)
+
+        assertEquals("Downloads/portable", extracted.relativePath)
+        assertEquals(
+            "MZ-binary",
+            File(drive, "Downloads/portable/portable/launcher.exe").readText()
+        )
+        assertEquals(
+            "ready=true",
+            File(drive, "Downloads/portable/portable/data/config.ini").readText()
+        )
+    }
+
+    @Test
+    fun rejectsZipSlipAndCleansTheStagingDirectory() {
+        val storage = CapsuleStorage(temporaryFolder.newFolder("capsules"))
+        val capsule = storage.createCapsule("Archive safety")
+        val drive = requireNotNull(storage.getDriveRoot(capsule.id, 'D'))
+        val archiveBytes = createZip("../escaped.txt" to "no".toByteArray())
+        val archive = storage.importFile(
+            capsule.id,
+            'D',
+            "Downloads",
+            "unsafe.zip",
+            ByteArrayInputStream(archiveBytes)
+        )
+
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            storage.extractZipArchive(capsule.id, 'D', archive.relativePath)
+        }
+
+        assertFalse(File(drive, "escaped.txt").exists())
+        assertTrue(File(drive, "Downloads").listFiles().orEmpty().none { it.name.startsWith(".vyrox-extract-") })
+    }
+
+    private fun createZip(vararg entries: Pair<String, ByteArray>): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            entries.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
     }
 
     @Test

@@ -7,9 +7,10 @@ import org.junit.Test
 
 class InstallerPolicyTest {
     @Test
-    fun acceptsExeAndMsiExtensionsCaseInsensitively() {
+    fun acceptsExeMsiAndZipExtensionsCaseInsensitively() {
         assertTrue(InstallerPolicy.isSupportedInstaller("setup.exe"))
         assertTrue(InstallerPolicy.isSupportedInstaller("package.MSI"))
+        assertTrue(InstallerPolicy.isSupportedInstaller("portable.ZIP"))
     }
 
     @Test
@@ -17,6 +18,7 @@ class InstallerPolicyTest {
         assertFalse(InstallerPolicy.isSupportedInstaller("readme.txt"))
         assertFalse(InstallerPolicy.isSupportedInstaller("installer"))
         assertFalse(InstallerPolicy.isSupportedInstaller("game.apk"))
+        assertFalse(InstallerPolicy.isSupportedInstaller("malware.zip.exe"))
     }
 
     @Test

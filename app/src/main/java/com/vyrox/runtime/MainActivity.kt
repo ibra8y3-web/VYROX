@@ -136,7 +136,8 @@ class MainActivity : ComponentActivity() {
                 onSearchCapsuleEntries = ::searchCapsuleEntries,
                 onSelectCapsuleSearchResult = ::selectCapsuleSearchResult,
                 onImportRootFs = ::requestRootFsImport,
-                onRemoveRootFs = ::removeRootFs
+                onRemoveRootFs = ::removeRootFs,
+                onExtractZipEntry = ::extractZipEntry
             )
         }
     }
@@ -497,6 +498,28 @@ class MainActivity : ComponentActivity() {
                 refreshCapsuleDirectory()
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not import the file into the Capsule."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun extractZipEntry(entry: CapsuleFileEntry) {
+        val capsule = selectedCapsule ?: return
+        if (isImporting) return
+        val drive = selectedDrive
+
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Extracting ZIP into the selected Capsule..."
+            try {
+                val extracted = withContext(Dispatchers.IO) {
+                    capsuleStorage.extractZipArchive(capsule.id, drive, entry.relativePath)
+                }
+                statusMessage = "Extracted to " + drive + ": " + extracted.relativePath
+                refreshCapsuleDirectory()
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not safely extract this ZIP archive."
             } finally {
                 isImporting = false
             }

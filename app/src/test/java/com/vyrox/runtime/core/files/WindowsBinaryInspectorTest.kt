@@ -7,6 +7,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.RandomAccessFile
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class WindowsBinaryInspectorTest {
     @get:Rule
@@ -56,6 +58,44 @@ class WindowsBinaryInspectorTest {
         val result = WindowsBinaryInspector.inspect(file, file.name)
         assertEquals(WindowsBinaryFormat.MSI_COMPOUND_DATABASE, result.format)
         assertEquals(WindowsArchitecture.UNKNOWN, result.architecture)
+    }
+
+    @Test
+    fun recognizesPortableZipArchive() {
+        val file = temporaryFolder.newFile("portable.zip")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("Portable/launcher.exe"))
+            zip.write(byteArrayOf('M'.code.toByte(), 'Z'.code.toByte()))
+            zip.closeEntry()
+        }
+
+        val result = WindowsBinaryInspector.inspect(file, file.name)
+
+        assertEquals(WindowsBinaryFormat.PORTABLE_ZIP_ARCHIVE, result.format)
+        assertEquals(WindowsArchitecture.UNKNOWN, result.architecture)
+    }
+
+    @Test
+    fun rejectsZipSlipAndDriveQualifiedArchiveEntries() {
+        val traversal = temporaryFolder.newFile("traversal.zip")
+        ZipOutputStream(traversal.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("../escape.exe"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+        }
+        assertThrows(java.io.IOException::class.java) {
+            WindowsBinaryInspector.inspect(traversal, traversal.name)
+        }
+
+        val drivePath = temporaryFolder.newFile("drive-path.zip")
+        ZipOutputStream(drivePath.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("C:/Windows/system.exe"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+        }
+        assertThrows(java.io.IOException::class.java) {
+            WindowsBinaryInspector.inspect(drivePath, drivePath.name)
+        }
     }
 
     private fun createPeFile(machine: Int, optionalMagic: Int): File {

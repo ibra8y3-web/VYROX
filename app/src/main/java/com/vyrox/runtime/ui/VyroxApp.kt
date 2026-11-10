@@ -87,7 +87,8 @@ fun VyroxApp(
     onSearchCapsuleEntries: (String) -> Unit,
     onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
-    onRemoveRootFs: (LinuxRootFsInfo) -> Unit
+    onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
+    onExtractZipEntry: (CapsuleFileEntry) -> Unit
 ) {
     var capsuleName by remember { mutableStateOf("") }
     var folderName by remember(selectedCapsule?.id, selectedDrive, currentPath) {
@@ -153,6 +154,7 @@ fun VyroxApp(
                     onSelectCapsuleSearchResult = onSelectCapsuleSearchResult,
                     onImportRootFs = onImportRootFs,
                     onRemoveRootFs = onRemoveRootFs,
+                    onExtractZipEntry = onExtractZipEntry,
                     onToggleDesktopMode = onToggleDesktopMode
                 )
             } else {
@@ -297,7 +299,7 @@ fun VyroxApp(
                                 )
                                 Text("  Importing...")
                             } else {
-                                Text("Import EXE / MSI installer")
+                                Text("Import EXE / MSI / ZIP")
                             }
                         }
                     }
@@ -599,7 +601,8 @@ internal fun CapsuleExplorerCard(
     onCreateFolder: () -> Unit,
     onImportFile: () -> Unit,
     onClose: () -> Unit,
-    onRequestDelete: (CapsuleFileEntry) -> Unit
+    onRequestDelete: (CapsuleFileEntry) -> Unit,
+    onExtractZipEntry: (CapsuleFileEntry) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -781,7 +784,8 @@ internal fun CapsuleExplorerCard(
                             onRename = { onRenameEntry(entry) },
                             onCopy = { onCopyEntry(entry) },
                             onMove = { onMoveEntry(entry) },
-                            onDelete = { onRequestDelete(entry) }
+                            onDelete = { onRequestDelete(entry) },
+                            onExtractZip = { onExtractZipEntry(entry) }
                         )
                     }
                 }
@@ -797,7 +801,8 @@ private fun CapsuleFileRow(
     onRename: () -> Unit,
     onCopy: () -> Unit,
     onMove: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onExtractZip: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -826,6 +831,9 @@ private fun CapsuleFileRow(
             OutlinedButton(onClick = onRename) { Text("Rename") }
             OutlinedButton(onClick = onCopy) { Text("Copy") }
             OutlinedButton(onClick = onMove) { Text("Move") }
+            if (!entry.isDirectory && entry.name.endsWith(".zip", ignoreCase = true)) {
+                OutlinedButton(onClick = onExtractZip) { Text("Extract ZIP") }
+            }
             OutlinedButton(onClick = onDelete) { Text("Remove") }
         }
     }

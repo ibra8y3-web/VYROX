@@ -15,7 +15,7 @@
 
 **VYROX is an open-source desktop-style runtime project hosted by Android.** It is designed to organize file-separated workspaces, manage imported Windows installers, and grow toward a tested Windows compatibility stack.
 
-> **Important current limitation:** VYROX does not run Windows EXE/MSI programs yet. Installer import is only file import into private app storage. Capsules are file-based workspaces, not virtual machines or hardened security sandboxes. Wine, CPU translation, and DirectX translation are not integrated.
+> **Important current limitation:** VYROX does not run Windows EXE/MSI programs yet. Installer import is only file import into private app storage; ZIP extraction writes files into a Capsule but does not install or execute a Windows program. Capsules are file-based workspaces, not virtual machines or hardened security sandboxes. Wine, CPU translation, and DirectX translation are not integrated.
 
 ## Visual architecture
 
@@ -29,9 +29,9 @@
 |---|---|
 | Android application | Kotlin, Jetpack Compose, Android document picker |
 | Desktop interface | Landscape-first shell, phone-admin orientation switch, Start menu, taskbar, multiple movable/resizable windows |
-| Installer library | Imports EXE/MSI files into private app storage; validates PE/COFF and MSI container signatures; does not execute them |
+| Installer library | Imports EXE/MSI/ZIP files into private app storage; validates PE/COFF, MSI compound-file and ZIP directory headers; securely extracts ZIP files only inside a selected Capsule; does not execute them |
 | Capsule workspaces | Create/list/delete app-private workspaces with independent C:/D: folder trees and metadata |
-| File manager | Browse, create, import, copy, move, rename, search and delete files within Capsule storage |
+| File manager | Browse, create, import, copy, move, rename, search, delete and safely extract ZIP archives within Capsule storage |
 | Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
 | Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
 | Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning and bounded process-log supervisor |

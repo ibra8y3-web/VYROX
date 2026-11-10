@@ -112,6 +112,7 @@ internal fun DesktopShell(
     onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
+    onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onToggleDesktopMode: () -> Unit
 ) {
     val windows = remember {
@@ -264,6 +265,7 @@ internal fun DesktopShell(
                                     onSelectCapsuleSearchResult = onSelectCapsuleSearchResult,
                                     onImportRootFs = onImportRootFs,
                                     onRemoveRootFs = onRemoveRootFs,
+                                    onExtractZipEntry = onExtractZipEntry,
                                     onOpenPanel = ::openPanel
                                 )
                             }
@@ -510,6 +512,7 @@ private fun DesktopPanelContent(
     onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
+    onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onOpenPanel: (DesktopPanel) -> Unit
 ) {
     Column(
@@ -606,6 +609,7 @@ private fun DesktopPanelContent(
                         onSelectSearchResult = onSelectCapsuleSearchResult,
                         onImportRootFs = onImportRootFs,
                         onRemoveRootFs = onRemoveRootFs,
+                        onExtractZipEntry = onExtractZipEntry,
                         onRenameEntry = onRenameCapsuleEntry,
                         onCopyEntry = onCopyCapsuleEntry,
                         onMoveEntry = onMoveCapsuleEntry,
@@ -631,7 +635,7 @@ private fun DesktopPanelContent(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
                         Button(onClick = onImport, enabled = !isImporting) {
-                            Text(if (isImporting) "Importing..." else "Import EXE / MSI")
+                            Text(if (isImporting) "Importing..." else "Import EXE / MSI / ZIP")
                         }
                     }
                 }

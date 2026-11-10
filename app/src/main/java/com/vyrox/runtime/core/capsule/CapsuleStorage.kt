@@ -8,6 +8,7 @@ import java.util.ArrayDeque
 import java.util.Locale
 import java.util.Properties
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 data class CapsuleInfo(
     val id: String,
@@ -356,6 +357,144 @@ class CapsuleStorage(private val capsuleRoot: File) {
         }
     }
 
+    @Throws(IOException::class, IllegalArgumentException::class)
+    fun extractZipArchive(
+        capsuleId: String,
+        driveLetter: Char,
+        archiveRelativePath: String
+    ): CapsuleFileEntry {
+        val driveRoot = getDriveRoot(capsuleId, driveLetter)
+            ?: throw IllegalArgumentException("Capsule drive not found.")
+        val archive = resolveDrivePath(driveRoot, archiveRelativePath)
+            ?: throw IllegalArgumentException("The ZIP archive is outside this Capsule drive.")
+        if (!archive.isFile || !archive.name.endsWith(".zip", ignoreCase = true)) {
+            throw IllegalArgumentException("Select a ZIP archive inside this Capsule.")
+        }
+
+        val parent = archive.parentFile.canonicalFile
+        if (!isWithinRoot(driveRoot, parent)) {
+            throw IllegalArgumentException("The ZIP destination is outside this Capsule drive.")
+        }
+        val folderName = CapsuleFilePolicy.requireValidEntryName(
+            archive.name.substringBeforeLast('.', archive.name)
+        )
+        if (hasCaseInsensitiveSibling(parent, folderName)) {
+            throw IOException("The extraction folder already exists.")
+        }
+
+        val destination = File(parent, folderName).canonicalFile
+        if (destination.parentFile != parent || !isWithinRoot(driveRoot, destination)) {
+            throw IllegalArgumentException("The extraction destination is invalid.")
+        }
+
+        val staging = File(parent, ".vyrox-extract-" + UUID.randomUUID()).canonicalFile
+        if (staging.parentFile != parent || !staging.mkdir()) {
+            throw IOException("Could not create a private extraction staging folder.")
+        }
+
+        val seenPaths = HashSet<String>()
+        val budget = ZipExtractionBudget()
+        try {
+            ZipInputStream(archive.inputStream().buffered()).use { input ->
+                while (true) {
+                    val entry = input.nextEntry ?: break
+                    budget.entries += 1
+                    if (budget.entries > MAX_ARCHIVE_ENTRIES) {
+                        throw IOException("The ZIP archive contains too many entries.")
+                    }
+
+                    val relativeEntryPath = normalizeZipEntryPath(entry.name)
+                    val collisionKey = relativeEntryPath.lowercase(Locale.ROOT)
+                    if (!seenPaths.add(collisionKey)) {
+                        throw IOException("The ZIP archive contains duplicate Windows paths.")
+                    }
+
+                    val target = File(staging, relativeEntryPath).canonicalFile
+                    if (!isWithinRoot(staging, target)) {
+                        throw IOException("The ZIP archive contains a path outside its extraction folder.")
+                    }
+
+                    val output = if (entry.isDirectory) {
+                        if (target.exists() && !target.isDirectory) {
+                            throw IOException("The ZIP archive contains a file/folder path conflict.")
+                        }
+                        if (!target.mkdirs() && !target.isDirectory) {
+                            throw IOException("Could not create an extracted folder.")
+                        }
+                        null
+                    } else {
+                        val targetParent = target.parentFile
+                            ?: throw IOException("The ZIP archive contains an invalid file path.")
+                        if (!isWithinRoot(staging, targetParent)) {
+                            throw IOException("The ZIP archive contains a path outside its extraction folder.")
+                        }
+                        if (!targetParent.mkdirs() && !targetParent.isDirectory) {
+                            throw IOException("Could not create an extracted parent folder.")
+                        }
+                        if (target.exists()) {
+                            throw IOException("The ZIP archive contains a duplicate output path.")
+                        }
+                        target.outputStream().buffered()
+                    }
+
+                    try {
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var entryBytes = 0L
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            if (count == 0) continue
+
+                            entryBytes += count
+                            budget.totalBytes += count
+                            if (
+                                entryBytes > MAX_ARCHIVE_ENTRY_BYTES ||
+                                budget.totalBytes > MAX_ARCHIVE_EXPANDED_BYTES
+                            ) {
+                                throw IOException("The ZIP archive exceeds the safe expanded-size limit.")
+                            }
+                            output?.write(buffer, 0, count)
+                        }
+                    } finally {
+                        output?.close()
+                    }
+                }
+            }
+
+            if (budget.entries == 0) {
+                throw IOException("The ZIP archive is empty.")
+            }
+            if (hasCaseInsensitiveSibling(parent, folderName)) {
+                throw IOException("The extraction folder already exists.")
+            }
+            if (!staging.renameTo(destination)) {
+                throw IOException("Could not finalize the extracted Capsule folder.")
+            }
+            return toEntry(driveRoot, destination)
+        } catch (exception: Exception) {
+            staging.deleteRecursively()
+            throw exception
+        } finally {
+            if (staging.exists()) staging.deleteRecursively()
+        }
+    }
+
+    private fun normalizeZipEntryPath(rawPath: String): String {
+        if (rawPath.isBlank() || rawPath.length > MAX_ARCHIVE_PATH_LENGTH || rawPath.any { it.code == 0 }) {
+            throw IOException("The ZIP archive contains an empty or oversized path.")
+        }
+        val normalized = rawPath.replace('\\', '/')
+        if (normalized.startsWith('/') || normalized.contains(':')) {
+            throw IOException("The ZIP archive contains an absolute or drive-qualified path.")
+        }
+        val trimmed = normalized.removeSuffix("/")
+        val segments = trimmed.split('/')
+        if (trimmed.isBlank() || segments.any { it.isBlank() || it == "." || it == ".." }) {
+            throw IOException("The ZIP archive contains a path traversal entry.")
+        }
+        return segments.joinToString("/") { CapsuleFilePolicy.requireValidEntryName(it) }
+    }
+
     fun searchEntries(
         capsuleId: String,
         driveLetter: Char,
@@ -443,6 +582,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
             throw IOException("Unsupported filesystem entry.")
         }
     }
+
+    private data class ZipExtractionBudget(var entries: Int = 0, var totalBytes: Long = 0L)
 
     private data class CopyBudget(
         var entries: Int = 0,
@@ -537,6 +678,10 @@ class CapsuleStorage(private val capsuleRoot: File) {
         const val MAX_CAPSULE_FILE_BYTES: Long = 2L * 1024L * 1024L * 1024L
         const val MAX_COPY_BYTES: Long = 8L * 1024L * 1024L * 1024L
         const val MAX_COPY_ENTRIES: Int = 10_000
+        const val MAX_ARCHIVE_ENTRIES: Int = 10_000
+        const val MAX_ARCHIVE_PATH_LENGTH: Int = 4_096
+        const val MAX_ARCHIVE_ENTRY_BYTES: Long = 2L * 1024L * 1024L * 1024L
+        const val MAX_ARCHIVE_EXPANDED_BYTES: Long = 2L * 1024L * 1024L * 1024L
         const val MAX_SEARCH_RESULTS: Int = 500
         const val MAX_SEARCH_VISITED: Int = 20_000
 
