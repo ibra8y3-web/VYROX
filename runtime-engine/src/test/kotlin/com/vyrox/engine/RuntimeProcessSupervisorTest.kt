@@ -60,7 +60,7 @@ class RuntimeProcessSupervisorTest {
     }
 
     @Test
-    fun setsHostLibraryPathFromApprovedNativeLibraryDirectory() {
+    fun passesStaticGuestLoaderWithoutHostLibraryPath() {
         val working = temporaryFolder.newFolder("host-loader-work")
         val logs = temporaryFolder.newFolder("host-loader-logs")
         val plan = shellPlan(
@@ -74,8 +74,8 @@ class RuntimeProcessSupervisorTest {
         val result = process.await(5_000)
         assertEquals(0, result.exitCode)
         val captured = result.logFile.readText()
-        assertTrue(captured.contains(plan.nativeLibraryRoot.canonicalPath))
-        assertTrue(captured.contains(File(plan.nativeLibraryRoot, "libproot-loader.so").canonicalPath))
+        assertTrue(captured.startsWith("|"))
+        assertTrue(captured.endsWith(File(plan.nativeLibraryRoot, "libproot-loader.so").canonicalPath))
     }
 
     @Test
@@ -92,6 +92,22 @@ class RuntimeProcessSupervisorTest {
             supervisor.start(plan, "host-env")
         }
         assertFalse(File(logs, "host-env.log").exists())
+    }
+
+    @Test
+    fun rejectsGuestAttemptsToOverrideProotLoaderPath() {
+        val working = temporaryFolder.newFolder("loader-env-work")
+        val logs = temporaryFolder.newFolder("loader-env-logs")
+        val plan = shellPlan(
+            working,
+            listOf("-c", "true"),
+            environment = mapOf("PROOT_LOADER" to "/tmp/untrusted-loader")
+        )
+        val supervisor = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/usr")))
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            supervisor.start(plan, "loader-env")
+        }
+        assertFalse(File(logs, "loader-env.log").exists())
     }
 
     @Test

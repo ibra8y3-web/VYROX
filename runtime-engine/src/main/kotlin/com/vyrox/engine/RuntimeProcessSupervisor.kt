@@ -95,8 +95,8 @@ class RuntimeProcessSupervisor(
         }
         plan.environment.forEach { (key, value) ->
             require(ENVIRONMENT_KEY.matches(key)) { "Invalid runtime environment variable name." }
-            require(!key.startsWith("LD_")) {
-                "Dynamic-linker variables are controlled by the host runtime, not guest input."
+            require(!key.startsWith("LD_") && key != "PROOT_LOADER") {
+                "Dynamic-linker and PRoot loader variables are controlled by the host runtime, not guest input."
             }
             validateProcessArgument(value)
         }
@@ -158,12 +158,10 @@ class RuntimeProcessSupervisor(
                 .redirectErrorStream(true)
                 .apply {
                     environment().clear()
-                    // PRoot is a Bionic host executable. Its native dependencies
-                    // are packaged beside it in nativeLibraryDir. Do not allow
-                    // guest-provided LD_* values to override this trusted path.
-                    environment()["LD_LIBRARY_PATH"] = hostLibraryDirectory.absolutePath
-                    environment()["PROOT_LOADER"] = guestLoader.absolutePath
+                    // Static talloc and libandroid-shmem are linked into PRoot.
+                    // Only the external guest loader path is host-controlled.
                     environment().putAll(plan.environment)
+                    environment()["PROOT_LOADER"] = guestLoader.absolutePath
                 }
                 .start()
 

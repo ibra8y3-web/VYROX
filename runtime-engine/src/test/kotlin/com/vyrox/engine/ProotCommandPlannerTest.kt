@@ -18,8 +18,6 @@ class ProotCommandPlannerTest {
         val capsule = File(root, "capsule").apply { mkdirs() }
         val rootFs = createRootFs(capsule)
         val proot = File(root, "proot").also(::writeArm64Elf)
-        writeElf(File(root, "libtalloc.so.2"), 183)
-        writeElf(File(root, "libandroid-shmem.so"), 183)
         writeElf(File(root, "libproot-loader.so"), 183, elfType = 2)
         val driveC = File(capsule, "drive_c").apply { mkdirs() }
 
@@ -73,15 +71,6 @@ class ProotCommandPlannerTest {
         }
 
         writeElf(loader, 183, elfType = 3)
-        assertThrows(IllegalArgumentException::class.java) {
-            ProotCommandPlanner.build(request(root, proot, rootFs))
-        }
-    }
-
-    @Test
-    fun rejectsMissingAndroidNativeDependency() {
-        val (root, proot, rootFs) = createValidRuntime()
-        File(root, "libtalloc.so.2").delete()
         assertThrows(IllegalArgumentException::class.java) {
             ProotCommandPlanner.build(request(root, proot, rootFs))
         }
@@ -240,8 +229,6 @@ class ProotCommandPlannerTest {
     private fun createValidRuntime(): Triple<File, File, File> {
         val root = temporaryFolder.newFolder("valid")
         val proot = File(root, "proot").also(::writeArm64Elf)
-        writeElf(File(root, "libtalloc.so.2"), 183)
-        writeElf(File(root, "libandroid-shmem.so"), 183)
         writeElf(File(root, "libproot-loader.so"), 183, elfType = 2)
         val rootFs = createRootFs(root)
         return Triple(root, proot, rootFs)

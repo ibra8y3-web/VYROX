@@ -54,18 +54,6 @@ object ProotCommandPlanner {
         ) {
             "A static ARM64 PRoot guest loader is missing from the APK native-library directory."
         }
-        REQUIRED_NATIVE_LIBRARIES.forEach { libraryName ->
-            val library = File(nativeLibraryRoot, libraryName)
-            require(
-                library.isFile &&
-                    library.canRead() &&
-                    !java.nio.file.Files.isSymbolicLink(library.toPath()) &&
-                    isWithin(nativeLibraryRoot, library) &&
-                    readElfMachine(library) == ARM64_ELF_MACHINE
-            ) {
-                "Required Android runtime library is missing or has the wrong ABI: $libraryName"
-            }
-        }
         require(readElfMachine(proot) == ARM64_ELF_MACHINE) {
             "PRoot must be a 64-bit AArch64 Android ELF executable."
         }
@@ -315,7 +303,6 @@ object ProotCommandPlanner {
     private const val ARM64_ELF_MACHINE = 183
     private const val ELF_TYPE_EXECUTABLE = 2
     private const val PROOT_LOADER_FILE_NAME = "libproot-loader.so"
-    private val REQUIRED_NATIVE_LIBRARIES = listOf("libtalloc.so.2", "libandroid-shmem.so")
     private const val MAX_BIND_MOUNTS = 32
     private const val MAX_ARGUMENTS = 256
     private const val MAX_ENVIRONMENT_ITEMS = 128
