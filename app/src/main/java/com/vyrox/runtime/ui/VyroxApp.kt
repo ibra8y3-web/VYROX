@@ -1,6 +1,13 @@
 package com.vyrox.runtime.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,12 +43,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleSnapshotInfo
+import com.vyrox.runtime.core.capsule.InstalledWindowsProgram
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.engine.RuntimeCompatibilityPlanner
@@ -67,6 +78,9 @@ private val VyroxArabicText = mapOf(
     "Import and inspect EXE, MSI and ZIP files" to "استيراد وفحص ملفات EXE وMSI وZIP",
     "Manage RootFS, test PRoot and build Box64" to "إدارة RootFS واختبار PRoot وبناء Box64",
     "GPU / DirectX translation: not integrated" to "ترجمة الرسوميات وDirectX: لم يتم دمجها بعد",
+    "Box64, Wine 11+ and per-Capsule Prefix setup actions are available; physical-device validation is still required." to "أدوات Box64 وWine 11+ وإنشاء بيئة مستقلة لكل Capsule متاحة؛ وما زال اختبار الهاتف الفعلي مطلوبًا.",
+    "DXVK/VKD3D installation is available after the Vulkan preflight; real game rendering is not yet certified." to "تثبيت DXVK وVKD3D متاح بعد فحص Vulkan؛ ولم يتم اعتماد تشغيل الألعاب فعليًا بعد.",
+    "Install" to "تثبيت وتشغيل",
     "Windows runtime environment for Android" to "بيئة تشغيل Windows على أندرويد",
     "Your PC. Your Phone. Your Environment." to "كمبيوترك وبيئتك في هاتفك.",
     "A desktop workspace inside Android" to "سطح مكتب متكامل داخل أندرويد",
@@ -81,6 +95,12 @@ private val VyroxArabicText = mapOf(
     "VYROX Installer Library" to "مكتبة التثبيت في VYROX",
     "No imported installers." to "لا توجد ملفات تثبيت مستوردة.",
     "Installed applications" to "التطبيقات المثبتة",
+    "Run" to "تشغيل",
+    "VYROX Windows Desktop" to "سطح مكتب Windows في VYROX",
+    "Close desktop" to "إغلاق سطح المكتب",
+    "Tap here to type" to "اضغط هنا للكتابة",
+    "Install DXVK + VKD3D-Proton" to "تثبيت DXVK وVKD3D-Proton",
+    "DXVK + VKD3D installed" to "تم تثبيت DXVK وVKD3D",
     "Select a Capsule first" to "اختر بيئة أولًا",
     "Import EXE / MSI / ZIP" to "استيراد EXE أو MSI أو ZIP",
     "Import Capsule backup" to "استيراد نسخة احتياطية لبيئة",
@@ -180,7 +200,13 @@ fun VyroxApp(
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
     box64Installed: Boolean,
+    wineInstalled: Boolean,
+    graphicsTranslationInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    windowsDesktopVisible: Boolean,
+    windowsDesktopFrame: Bitmap?,
+    windowsDesktopStatus: String,
     isImporting: Boolean,
     activeRuntimeLabel: String?,
     isStoppingRuntimeProcess: Boolean,
@@ -192,6 +218,7 @@ fun VyroxApp(
     onToggleDesktopMode: () -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
+    onInstallImportedInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: (String) -> Unit,
     onDeleteCapsule: (CapsuleInfo) -> Unit,
     onOpenCapsule: (CapsuleInfo) -> Unit,
@@ -211,6 +238,15 @@ fun VyroxApp(
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
+    onInstallWine: (LinuxRootFsInfo) -> Unit,
+    onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
+    onInstallGraphicsTranslation: (LinuxRootFsInfo) -> Unit,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
+    onCloseWindowsDesktop: () -> Unit,
+    onVncPointer: (Int, Int, Int) -> Unit,
+    onVncKeySym: (Int, Boolean) -> Unit,
+    onVncText: (String) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -243,7 +279,16 @@ fun VyroxApp(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            if (isDesktopMode) {
+            if (windowsDesktopVisible) {
+                WindowsDesktopViewer(
+                    frame = windowsDesktopFrame,
+                    status = windowsDesktopStatus,
+                    onClose = onCloseWindowsDesktop,
+                    onPointer = onVncPointer,
+                    onKeySym = onVncKeySym,
+                    onText = onVncText
+                )
+            } else if (isDesktopMode) {
                 DesktopShell(
                     installers = installers,
                     capsules = capsules,
@@ -256,7 +301,12 @@ fun VyroxApp(
                     hostCapabilities = hostCapabilities,
                     prootBinaryAvailable = prootBinaryAvailable,
                     box64Installed = box64Installed,
+                    wineInstalled = wineInstalled,
+                    graphicsTranslationInstalled = graphicsTranslationInstalled,
                     winePrefixInfo = winePrefixInfo,
+                    installedWindowsPrograms = installedWindowsPrograms,
+                    onRunWindowsEntry = onRunWindowsEntry,
+                    onLaunchWindowsProgram = onLaunchWindowsProgram,
                     isImporting = isImporting,
                     activeRuntimeLabel = activeRuntimeLabel,
                     isStoppingRuntimeProcess = isStoppingRuntimeProcess,
@@ -272,6 +322,7 @@ fun VyroxApp(
                     onSearchQueryChange = { searchQuery = it },
                     onImport = onImport,
                     onDeleteInstaller = onDeleteInstaller,
+                    onInstallImportedInstaller = onInstallImportedInstaller,
                     onCreateCapsule = {
                         onCreateCapsule(capsuleName)
                         capsuleName = ""
@@ -300,6 +351,9 @@ fun VyroxApp(
                     onTestRootFs = onTestRootFs,
                     onBuildBox64 = onBuildBox64,
                     onCheckWinePackages = onCheckWinePackages,
+                    onInstallWine = onInstallWine,
+                    onCreateWinePrefix = onCreateWinePrefix,
+                    onInstallGraphicsTranslation = onInstallGraphicsTranslation,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -436,8 +490,16 @@ fun VyroxApp(
                         onTestRootFs = onTestRootFs,
                         onBuildBox64 = onBuildBox64,
                         onCheckWinePackages = onCheckWinePackages,
+                        onInstallWine = onInstallWine,
+                        onCreateWinePrefix = onCreateWinePrefix,
+                        onInstallGraphicsTranslation = onInstallGraphicsTranslation,
                         box64Installed = box64Installed,
+                        wineInstalled = wineInstalled,
+                        graphicsTranslationInstalled = graphicsTranslationInstalled,
                         winePrefixInfo = winePrefixInfo,
+                        installedWindowsPrograms = installedWindowsPrograms,
+                        onRunWindowsEntry = onRunWindowsEntry,
+                        onLaunchWindowsProgram = onLaunchWindowsProgram,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -468,7 +530,7 @@ fun VyroxApp(
                     ) {
                         Text(vxText("Foundation build"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
-                            "Imports EXE/MSI installers and ZIP archives into private app storage. ZIP extraction is confined to a selected Capsule; Windows executables are not run yet.",
+                            "Import EXE/MSI installers into a Capsule drive, then run them with its verified Wine prefix.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
                         )
                         Button(
@@ -529,7 +591,14 @@ fun VyroxApp(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         installers.forEach { installer ->
-                            InstallerRow(installer = installer, onDelete = onDeleteInstaller)
+                            InstallerRow(
+                                installer = installer,
+                                canInstall = selectedCapsule != null &&
+                                    winePrefixInfo?.capsuleId == selectedCapsule.id &&
+                                    box64Installed && wineInstalled && !isImporting,
+                                onInstall = onInstallImportedInstaller,
+                                onDelete = onDeleteInstaller
+                            )
                         }
                     }
                 }
@@ -544,11 +613,10 @@ fun VyroxApp(
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(vxText("Runtime engines"), fontWeight = FontWeight.Bold)
-                        Text(vxText("Wine compatibility: not integrated"))
-                        Text(vxText("CPU translation: not integrated"))
-                        Text(vxText("GPU / DirectX translation: not integrated"))
+                        Text(vxText("Box64, Wine 11+ and per-Capsule Prefix setup actions are available; physical-device validation is still required."))
+                        Text(vxText("DXVK/VKD3D installation is available after the Vulkan preflight; real game rendering is not yet certified."))
                         Text(
-                            "Capsule isolation and Windows process execution are future milestones.",
+                            "Capsules are file-separated workspaces, not virtual machines or hardened security sandboxes.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
                     }
@@ -744,6 +812,7 @@ internal fun ActiveRuntimeOperationCard(
     }
 }
 
+@Composable
 internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,
@@ -911,8 +980,16 @@ internal fun CapsuleExplorerCard(
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
+    onInstallWine: (LinuxRootFsInfo) -> Unit,
+    onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
+    onInstallGraphicsTranslation: (LinuxRootFsInfo) -> Unit,
+    graphicsTranslationInstalled: Boolean,
     box64Installed: Boolean,
+    wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -965,7 +1042,7 @@ internal fun CapsuleExplorerCard(
             }
             Text(drivePath, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             Text(
-                "Files are stored inside this app. These folders are not mounted Windows drives.",
+                "These folders are app-private storage. Once a Wine prefix is verified, Wine uses the same folders as C: and D:.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 style = MaterialTheme.typography.bodySmall
             )
@@ -1078,6 +1155,44 @@ internal fun CapsuleExplorerCard(
                                     ) {
                                         OutlinedButton(
                                             modifier = Modifier.weight(1f),
+                                            onClick = { onInstallWine(rootFs) },
+                                            enabled = !isImporting && box64Installed && !wineInstalled
+                                        ) {
+                                            Text(if (wineInstalled) vxText("Wine 11 installed") else vxText("Install Wine 11 WoW64"))
+                                        }
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onCreateWinePrefix(rootFs) },
+                                            enabled = !isImporting && box64Installed && wineInstalled && winePrefixInfo == null
+                                        ) {
+                                            Text(vxText("Create Windows prefix"))
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onInstallGraphicsTranslation(rootFs) },
+                                            enabled = !isImporting && box64Installed && wineInstalled &&
+                                                winePrefixInfo != null && !graphicsTranslationInstalled
+                                        ) {
+                                            Text(
+                                                if (graphicsTranslationInstalled) {
+                                                    vxText("DXVK + VKD3D installed")
+                                                } else {
+                                                    vxText("Install DXVK + VKD3D-Proton")
+                                                }
+                                            )
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
                                             onClick = { onTestRootFs(rootFs) },
                                             enabled = !isImporting
                                         ) {
@@ -1106,6 +1221,11 @@ internal fun CapsuleExplorerCard(
                     }
                 }
             }
+
+            InstalledWindowsAppsPanel(
+                programs = installedWindowsPrograms,
+                onLaunch = onLaunchWindowsProgram
+            )
 
             OutlinedTextField(
                 value = destinationPath,
@@ -1169,8 +1289,92 @@ internal fun CapsuleExplorerCard(
                             onCopy = { onCopyEntry(entry) },
                             onMove = { onMoveEntry(entry) },
                             onDelete = { onRequestDelete(entry) },
-                            onExtractZip = { onExtractZipEntry(entry) }
+                            onExtractZip = { onExtractZipEntry(entry) },
+                            onRunWindowsEntry = { onRunWindowsEntry(entry) }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun InstalledWindowsAppsPanel(
+    programs: List<InstalledWindowsProgram>,
+    onLaunch: (InstalledWindowsProgram) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(vxText("Installed applications"), fontWeight = FontWeight.SemiBold)
+            if (programs.isEmpty()) {
+                Text(
+                    vxText("No Windows apps installed yet"),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    programs.forEach { program ->
+                        val iconBitmap = remember(program.iconFile?.absolutePath) {
+                            program.iconFile
+                                ?.takeIf { it.isFile && it.length() in 1..(8L * 1024L * 1024L) }
+                                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+                        }
+                        Card(
+                            modifier = Modifier.width(112.dp).clickable { onLaunch(program) },
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                if (iconBitmap != null) {
+                                    Image(
+                                        bitmap = iconBitmap.asImageBitmap(),
+                                        contentDescription = program.name,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.size(48.dp)
+                                            .background(Color(0xFF405D91), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            program.name.take(1).uppercase(Locale.ROOT),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp
+                                        )
+                                    }
+                                }
+                                Text(
+                                    program.name,
+                                    maxLines = 2,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    vxText("Open"),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1186,7 +1390,8 @@ private fun CapsuleFileRow(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
-    onExtractZip: () -> Unit
+    onExtractZip: () -> Unit,
+    onRunWindowsEntry: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1217,6 +1422,12 @@ private fun CapsuleFileRow(
             OutlinedButton(onClick = onMove) { Text(vxText("Move")) }
             if (!entry.isDirectory && entry.name.endsWith(".zip", ignoreCase = true)) {
                 OutlinedButton(onClick = onExtractZip) { Text(vxText("Extract ZIP")) }
+            }
+            if (
+                !entry.isDirectory &&
+                entry.name.substringAfterLast('.', "").lowercase(Locale.ROOT) in setOf("exe", "msi")
+            ) {
+                Button(onClick = onRunWindowsEntry) { Text(vxText("Run")) }
             }
             OutlinedButton(onClick = onDelete) { Text(vxText("Remove")) }
         }
@@ -1281,8 +1492,13 @@ internal fun CapsuleRow(
 @Composable
 internal fun InstallerRow(
     installer: ImportedInstaller,
+    canInstall: Boolean,
+    onInstall: (ImportedInstaller) -> Unit,
     onDelete: (ImportedInstaller) -> Unit
 ) {
+    val extension = installer.displayName.substringAfterLast('.', "").lowercase()
+    val architectureSupported = extension == "msi" ||
+        installer.architectureLabel in setOf("x86", "x86-64")
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1309,8 +1525,18 @@ internal fun InstallerRow(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            OutlinedButton(onClick = { onDelete(installer) }) {
-                Text(vxText("Remove"))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (installer.displayName.substringAfterLast('.', "").lowercase() in setOf("exe", "msi")) {
+                    Button(
+                        onClick = { onInstall(installer) },
+                        enabled = canInstall && architectureSupported
+                    ) {
+                        Text(vxText("Install"))
+                    }
+                }
+                OutlinedButton(onClick = { onDelete(installer) }) {
+                    Text(vxText("Remove"))
+                }
             }
         }
     }

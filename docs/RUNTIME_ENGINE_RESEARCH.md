@@ -1,98 +1,58 @@
-# Windows runtime engine research and integration decision
+# Windows runtime engine research and integration status
 
-**Status: Windows compatibility is not integrated. The source now includes a pinned Box64 v0.4.4 build action for an ARM64 glibc RootFS, but Box64 has not been built or executed on a physical Android device. The JNI/C++ host-information bridge is not a compatibility engine.**
+## Current implementation status
 
-## Host target
+VYROX now contains source paths for a multi-layer Windows compatibility experiment inside an Android-hosted ARM64 Linux RootFS:
 
-VYROX is an Android application. The first runtime host target is 64-bit ARM Android
-(`arm64-v8a`). The app reads Android's supported ABI list, logical CPU count, and total memory.
-Its Vulkan probe reports actual device extension names, push-constant size,
-descriptor indexing, scalar block layout, and integer feature support. These are preflight checks
-only; they do not prove DXVK or Windows applications will run on a particular
-Android device.
+- Android PRoot native build and package flow.
+- Box64 v0.4.4 guest build plan with an x86-64 syscall smoke check.
+- WineHQ stable amd64 package installation through Box64.
+- Real per-Capsule prefix initialization using `wineboot -u`.
+- EXE/MSI process launch, Windows desktop framebuffer, touch/keyboard forwarding and PCM audio bridge.
+- Program discovery and Windows executable icon extraction.
+- Pinned DXVK 3.1.1 and VKD3D-Proton 3.1 installation plans with a guest Vulkan preflight and DLL checks.
 
-## Separate the Windows API layer from CPU translation
+These are **source implementation milestones, not end-to-end physical-device verification**. The JNI/C++ host-information bridge is not a Windows compatibility engine. CI verifies source compilation/tests/packaging; only a real Android phone can prove ptrace, Box64, Wine, Vulkan, screen, input and audio behavior together.
 
-- **Wine** provides the Windows API compatibility layer. It is not a CPU translator.
-  Wine needs a compatible Unix-like host environment and a correctly built runtime
-  prefix. Its Android integration must be built and tested specifically for Android;
-  merely placing a Wine executable in the APK is not sufficient.
-- **Box64** targets x86-64 Linux user-space programs on 64-bit ARM Linux and forwards
-  calls to host Linux libraries. It is not a standalone loader for Windows PE/EXE
-  files. A VYROX route using Box64 therefore needs a compatible Linux user-space
-  environment and Wine, not just an EXE file picker.
-  Source: https://github.com/ptitSeb/box64
-- **FEX** runs x86 and x86-64 applications on ARM64 Linux and requires an x86-64
-  RootFS. Its upstream FAQ says Android is not a supported FEX target; FEXCore
-  can be built as a library for Android, but that alone is not a usable emulator.
-  Source: https://github.com/FEX-Emu/FEX
-- **Winlator** demonstrates an existing Android combination of Wine with Box86/Box64
-  and graphics components. It is useful as a technical reference, but VYROX will
-  keep its own app, Capsule manager, storage model, and engine interfaces. Its
-  source repository is LGPL-2.1; do not copy or redistribute its code without
-  following that license.
-  Source: https://github.com/brunodev85/winlator
+## Host target and separation of layers
 
-## Wine 11.0 WoW64 and per-Capsule Prefixes\n\nWine 11.0 is the initial candidate because its January 13, 2026 release marks the new WoW64 architecture fully supported; the 64-bit prefix can run 32-bit Windows applications and uses one `wine` loader. This does not make Wine an Android binary or integrate it with VYROX. The selected ARM64 glibc RootFS still needs amd64 Wine packages and runtime libraries that can be loaded through Box64. Debian multiarch can add a foreign package architecture, but only if the RootFS repositories publish it and dependency versions remain consistent. VYROX will inspect sources/codename/candidates rather than silently mix package suites.\n\nEach Capsule will receive a separate prefix created by a real `wineboot -u` process under Box64; the app must verify registry files, drive mappings and Wine version before marking it ready. No placeholder registry files or fake prefix states will be created. The complete proposed layout and readiness gates are in [Windows Prefix architecture](WINDOWS_PREFIX_ARCHITECTURE.md).\n\n## Graphics path is conditional
+The first target is 64-bit ARM Android (`arm64-v8a`) with an imported ARM64 Debian/Ubuntu glibc RootFS.
 
-DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. The current DXVK 3.x
-driver guide requires Vulkan 1.4 and these device extensions:
-`VK_EXT_depth_clip_enable`, `VK_KHR_maintenance5`,
-`VK_KHR_maintenance6`, `VK_KHR_load_store_op_none`,
-`VK_EXT_robustness2`, and `VK_EXT_transform_feedback`. Drivers must also
-expose at least 256 bytes of push constants, descriptor indexing, 8-bit, 16-bit,
-and 64-bit integer types, and `scalarBlockLayout`. Upstream does not provide
-first-party support for Android/mobile GPU drivers. VYROX must probe and then
-physically test each driver.
+- **PRoot** redirects Linux filesystem/process paths inside the imported RootFS. It does not provide Windows APIs or a security boundary.
+- **Box64** translates x86-64 Linux ELF programs on ARM64 Linux. It is not a Windows PE loader.
+- **Wine** provides Windows API compatibility and needs a compatible x86-64 Linux userland plus a working Wine prefix.
+- **DXVK** translates selected Direct3D 9/10/11 interfaces over Vulkan.
+- **VKD3D-Proton** translates Direct3D 12 over Vulkan.
+- **Android UI bridges** are responsible for the guest display, pointer/keyboard events and PCM audio transfer.
 
-Source: https://github.com/doitsujin/dxvk
+This is a Linux guest/runtime stack hosted by an Android app; it is not an independent Windows kernel or a VM.
 
-## Licensing notes for evaluation
+## Graphics and Vulkan boundary
 
-- Box64: MIT.
-- FEX: MIT.
-- DXVK: zlib/libpng.
-- Winlator app source: LGPL-2.1.
+The app's Android Vulkan capability probe describes the host device. The optional graphics installer separately probes the Vulkan environment visible inside the Linux RootFS, downloads pinned upstream releases, runs their Wine setup scripts through Box64 and verifies the expected DLLs in the selected Capsule prefix.
 
-These licenses still require per-component review, notices, and any applicable
-source-offer or redistribution obligations before shipping binaries. The upstream
-license of each exact Wine build and any graphics driver package must also be
-checked at the pinned revision.
+A guest-side Vulkan device can be software-backed (for example, lavapipe). That does not imply Android GPU acceleration. Android/mobile driver compatibility, Vulkan extensions, descriptor features, push constants, required WSI behavior and actual D3D rendering must all be tested on the specific device. Presence of the translation DLLs is an installation check, not a successful game test.
 
-## Implementation gates
+## Source references
 
-1. **Host profile:** implemented in the Android app; unit tests verify the ARM64
-   ABI decision.
-2. **Native build infrastructure:** implemented with a pinned NDK/CMake build and
-   a JNI host-information library. The Vulkan probe reports the physical device
-   and is being extended to expose the required DXVK extension and feature values.
-3. **Runtime planning:** implemented in a separate Kotlin/JVM module. It records
-   upstream component roles and licenses and reports missing Windows x64 runtime
-   prerequisites; it does not start a process or install third-party binaries.
-3. **Linux user-space and Wine:** select an Android-compatible build strategy,
-   pin upstream revisions, document how glibc/Bionic boundaries are handled, and
-   build an ARM64 Wine runtime.
-4. **x86-64 execution:** select one translator path (Box64 or FEX) only after proving
-   it can run with the chosen Android user-space and Wine build.
-5. **Graphics:** add Vulkan/DXVK only after testing the target GPU and driver.
-6. **Execution proof:** launch a small redistributable Windows test program on a
-   physical ARM64 phone and capture the exact device, ABI, engine revisions,
-   logs, and exit status.
+- [Box64](https://github.com/ptitSeb/box64)
+- [Wine](https://www.winehq.org/)
+- [DXVK](https://github.com/doitsujin/dxvk)
+- [VKD3D-Proton](https://github.com/HansKristian-Work/vkd3d-proton)
+- [PRoot](https://github.com/termux/proot)
 
-Do not mark a gate complete because dependencies downloaded or a native library
-compiled. Windows execution requires the physical-device proof in gate 6.
+For the execution flow, package checks and readiness matrix, see [Windows runtime and Prefix architecture](WINDOWS_PREFIX_ARCHITECTURE.md). For licenses and redistribution obligations, see [third-party components](THIRD_PARTY_COMPONENTS.md).
 
+## Physical-device gates
 
-## Box64 build action\n\nThe app offers a pinned Box64 v0.4.4 source build inside an imported ARM64 Debian/Ubuntu glibc RootFS. It uses PRoot guest uid/gid mapping (`-0`) for package installation; that does not grant Android root. For network-based APT/Git operations it binds `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/proc`, and a temporary `/etc/resolv.conf` generated from Android's active network DNS servers. The resolver file is app-private, marked read-only, and deleted after the build process exits. These binds are restricted to the Box64 build request, not enabled for ordinary Capsule processes.\n\nThe build script verifies the exact upstream commit, compiles with the ARM64 DynaRec and `BAD_SIGNAL` flags, checks `box64 --version`, then writes metadata. It does not test an x86-64 program, run Wine, or launch an EXE.\n\n## PRoot boundary
+Before calling VYROX a working Windows environment, test and archive:
 
-PRoot is the missing userland launcher between an imported Linux RootFS and Wine.
-It relies on `ptrace` and implements rootfs redirection/bind mounts in user space.
-The current code includes a command planner that validates the RootFS path,
-guest executable, bind source roots, and argument vector. It deliberately does
-not start a process until an Android-compatible PRoot executable is built,
-licensed, packaged, and verified on a real device.
+1. PRoot starts the imported ARM64 RootFS shell on a physical phone.
+2. Box64 builds and runs a normal x86-64 Linux workload, not only a minimal syscall smoke.
+3. Wine's version command and real `wineboot -u` succeed through Box64.
+4. EXE and MSI test installers complete and the resulting applications are detected.
+5. The guest desktop is visible and can be controlled through touch/keyboard.
+6. Audio reaches Android with acceptable latency and stops cleanly with the session.
+7. DXVK/VKD3D render real Direct3D 9/11/12 test workloads using the target phone's actual Vulkan path.
 
-The Termux PRoot fork and package build process are the most useful Android
-references. VYROX must use a pinned Termux-derived source revision and review
-its patches, dependencies, and GPL notices. A generic desktop Linux PRoot binary
-is not assumed to run on Android.
+Do not mark a gate complete because a package downloaded, a process was launched, or a DLL file exists. Record the phone model, Android version, ABI, RootFS distribution, exact component revisions, logs, test application and result.

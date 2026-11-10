@@ -14,7 +14,9 @@ class WinePrefixCreationTicket internal constructor(
     val stagingDirectory: File,
     val guestPrefixPath: String,
     val guestDriveCPath: String,
-    val guestDriveDPath: String
+    val guestDriveDPath: String,
+    val hostDriveCDirectory: File,
+    val hostDriveDDirectory: File
 )
 
 data class WinePrefixInfo(
@@ -40,6 +42,13 @@ class WinePrefixManager(
     fun prepareCreation(capsuleId: String): WinePrefixCreationTicket {
         requireValidCapsuleId(capsuleId)
         val root = requireRootFs()
+        val capsuleWorkspace = resolveCapsuleWorkspace(root, capsuleId)
+        val hostDriveC = resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_c")
+        val hostDriveD = resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_d")
+        val guestDriveCPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_c"
+        val guestDriveDPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_d"
+        ensureSafeDirectory(root, listOf("mnt", "vyrox", "capsules", capsuleId, "drive_c"))
+        ensureSafeDirectory(root, listOf("mnt", "vyrox", "capsules", capsuleId, "drive_d"))
         val prefixRoot = ensureSafeDirectory(root, listOf("opt", "vyrox", "prefixes"))
         val destination = File(prefixRoot, capsuleId).canonicalFile
         if (
@@ -57,13 +66,21 @@ class WinePrefixManager(
             throw IOException("Could not create a private Wine prefix staging directory.")
         }
 
-        return WinePrefixCreationTicket(
-            capsuleId = capsuleId,
-            stagingDirectory = staging,
-            guestPrefixPath = toGuestPath(root, staging),
-            guestDriveCPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_c",
-            guestDriveDPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_d"
-        )
+        return try {
+            Files.createSymbolicLink(File(staging, "drive_c").toPath(), Paths.get(guestDriveCPath))
+            WinePrefixCreationTicket(
+                capsuleId = capsuleId,
+                stagingDirectory = staging,
+                guestPrefixPath = toGuestPath(root, staging),
+                guestDriveCPath = guestDriveCPath,
+                guestDriveDPath = guestDriveDPath,
+                hostDriveCDirectory = hostDriveC,
+                hostDriveDDirectory = hostDriveD
+            )
+        } catch (exception: Exception) {
+            staging.deleteRecursively()
+            throw IOException("Could not prepare the Capsule C: drive mount point for Wineboot.", exception)
+        }
     }
 
     /**
@@ -84,7 +101,7 @@ class WinePrefixManager(
         val prefixRoot = ensureSafeDirectory(root, listOf("opt", "vyrox", "prefixes"))
         val staging = resolveStagingTicket(root, prefixRoot, ticket)
 
-        validateWineRegistry(staging)
+        validateWineRegistry(staging, ticket.hostDriveCDirectory, ticket.guestDriveCPath)
         validateWinebootDefaultLinks(staging)
         redirectCapsuleDrives(staging, ticket)
 
@@ -123,6 +140,13 @@ class WinePrefixManager(
         val root = requireRootFs()
         val prefixRoot = existingSafeDirectory(root, listOf("opt", "vyrox", "prefixes"))
             ?: return null
+        val capsuleWorkspace = resolveCapsuleWorkspace(root, capsuleId)
+        val hostDriveC = resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_c")
+        resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_d")
+        val guestDriveCPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_c"
+        val guestDriveDPath = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_d"
+        ensureSafeDirectory(root, listOf("mnt", "vyrox", "capsules", capsuleId, "drive_c"))
+        ensureSafeDirectory(root, listOf("mnt", "vyrox", "capsules", capsuleId, "drive_d"))
         val directory = File(prefixRoot, capsuleId).canonicalFile
         if (
             directory.parentFile != prefixRoot ||
@@ -144,7 +168,7 @@ class WinePrefixManager(
             metadata.getProperty("wow64Mode") != PREFIX_WOW64_MODE
         ) return null
 
-        validateWineRegistry(directory)
+        validateWineRegistry(directory, hostDriveC, guestDriveCPath)
         val dosDevices = safeDosDevicesDirectory(directory) ?: return null
         val cLink = File(dosDevices, "c:")
         val dLink = File(dosDevices, "d:")
@@ -155,14 +179,13 @@ class WinePrefixManager(
             !Files.isSymbolicLink(zLink.toPath())
         ) return null
 
-        val driveC = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_c"
-        val driveD = GUEST_MOUNT_ROOT + "/" + capsuleId + "/drive_d"
         if (
-            readLink(cLink) != driveC ||
-            readLink(dLink) != driveD ||
+            readLink(cLink) != "../drive_c" ||
+            readLink(dLink) != guestDriveDPath ||
             readLink(zLink) != "/" ||
-            metadata.getProperty("driveCGuestPath") != driveC ||
-            metadata.getProperty("driveDGuestPath") != driveD
+            readLink(File(directory, "drive_c")) != guestDriveCPath ||
+            metadata.getProperty("driveCGuestPath") != guestDriveCPath ||
+            metadata.getProperty("driveDGuestPath") != guestDriveDPath
         ) return null
 
         val createdAt = metadata.getProperty("createdAtEpochMillis")?.toLongOrNull()
@@ -174,8 +197,8 @@ class WinePrefixManager(
             wineVersion = version,
             architecture = PREFIX_ARCHITECTURE,
             createdAtEpochMillis = createdAt,
-            guestDriveCPath = driveC,
-            guestDriveDPath = driveD
+            guestDriveCPath = guestDriveCPath,
+            guestDriveDPath = guestDriveDPath
         )
     }.getOrNull()
 
@@ -196,6 +219,9 @@ class WinePrefixManager(
             throw SecurityException("Wine prefix staging ticket cannot reference a symbolic link.")
         }
         val staging = stagingCandidate.canonicalFile
+        val capsuleWorkspace = resolveCapsuleWorkspace(root, ticket.capsuleId)
+        val expectedDriveC = resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_c")
+        val expectedDriveD = resolveCapsuleDriveDirectory(capsuleWorkspace, "drive_d")
         if (
             staging.parentFile != prefixRoot ||
             !staging.name.startsWith(".staging-" + ticket.capsuleId + "-") ||
@@ -203,6 +229,10 @@ class WinePrefixManager(
             ticket.guestDriveCPath != GUEST_MOUNT_ROOT + "/" + ticket.capsuleId + "/drive_c" ||
             ticket.guestDriveDPath != GUEST_MOUNT_ROOT + "/" + ticket.capsuleId + "/drive_d" ||
             Files.isSymbolicLink(staging.toPath()) ||
+            Files.isSymbolicLink(ticket.hostDriveCDirectory.toPath()) ||
+            Files.isSymbolicLink(ticket.hostDriveDDirectory.toPath()) ||
+            ticket.hostDriveCDirectory.canonicalFile != expectedDriveC ||
+            ticket.hostDriveDDirectory.canonicalFile != expectedDriveD ||
             !staging.isDirectory
         ) {
             throw SecurityException("Wine prefix staging ticket is invalid or escaped its RootFS.")
@@ -210,7 +240,11 @@ class WinePrefixManager(
         return staging
     }
 
-    private fun validateWineRegistry(prefix: File) {
+    private fun validateWineRegistry(
+        prefix: File,
+        capsuleDriveC: File,
+        expectedGuestDriveCPath: String
+    ) {
         if (!prefix.isDirectory || Files.isSymbolicLink(prefix.toPath())) {
             throw IOException("Wine did not create a real prefix directory.")
         }
@@ -229,8 +263,22 @@ class WinePrefixManager(
             }
         }
         val driveC = File(prefix, "drive_c")
-        if (!driveC.isDirectory || Files.isSymbolicLink(driveC.toPath())) {
-            throw IOException("Wineboot did not create its drive_c directory.")
+        val expectedCapsuleId = expectedGuestDriveCPath
+            .removePrefix(GUEST_MOUNT_ROOT + "/")
+            .substringBefore('/')
+        if (
+            !Files.isSymbolicLink(driveC.toPath()) ||
+            readLink(driveC) != expectedGuestDriveCPath ||
+            Files.isSymbolicLink(capsuleDriveC.toPath()) ||
+            !capsuleDriveC.isDirectory ||
+            capsuleDriveC.canonicalFile.parentFile?.name != expectedCapsuleId
+        ) {
+            throw IOException("Wineboot C: must remain linked to this Capsule's mounted drive.")
+        }
+        val windows = capsuleDriveC.listFiles()
+            ?.firstOrNull { it.name.equals("Windows", ignoreCase = true) }
+        if (windows?.isDirectory != true || Files.isSymbolicLink(windows.toPath())) {
+            throw IOException("Wineboot did not create the Windows directory on the Capsule C: drive.")
         }
         if (safeDosDevicesDirectory(prefix) == null) {
             throw IOException("Wineboot did not create a safe dosdevices directory.")
@@ -267,8 +315,12 @@ class WinePrefixManager(
         val cLink = File(dosDevices, "c:")
         val dLink = File(dosDevices, "d:")
 
-        Files.delete(cLink.toPath())
-        Files.createSymbolicLink(cLink.toPath(), Paths.get(ticket.guestDriveCPath))
+        if (
+            !Files.isSymbolicLink(cLink.toPath()) ||
+            readLink(cLink) != "../drive_c"
+        ) {
+            throw IOException("Wine's C: link must resolve through the Capsule-mounted drive_c link.")
+        }
         if (Files.exists(dLink.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             if (!Files.isSymbolicLink(dLink.toPath())) {
                 throw IOException("Wine's existing D: mapping is not a symbolic link.")
@@ -337,6 +389,41 @@ class WinePrefixManager(
             path.canonicalFile.parentFile != prefix.canonicalFile
         ) return null
         return path.canonicalFile
+    }
+
+    private fun resolveCapsuleWorkspace(root: File, capsuleId: String): File {
+        requireValidCapsuleId(capsuleId)
+        val linuxDirectory = root.parentFile?.canonicalFile
+            ?: throw IOException("The selected RootFS has no Capsule Linux directory.")
+        val capsuleDirectory = linuxDirectory.parentFile?.canonicalFile
+            ?: throw IOException("The selected RootFS has no Capsule workspace.")
+        if (
+            linuxDirectory.name != "linux" ||
+            capsuleDirectory.name != capsuleId ||
+            Files.isSymbolicLink(linuxDirectory.toPath()) ||
+            Files.isSymbolicLink(capsuleDirectory.toPath()) ||
+            !capsuleDirectory.isDirectory
+        ) {
+            throw SecurityException("The selected RootFS is not inside the requested Capsule workspace.")
+        }
+        val metadata = File(capsuleDirectory, "capsule.properties")
+        if (Files.isSymbolicLink(metadata.toPath()) || !metadata.isFile) {
+            throw IOException("The selected Capsule metadata is missing or unsafe.")
+        }
+        return capsuleDirectory
+    }
+
+    private fun resolveCapsuleDriveDirectory(workspace: File, name: String): File {
+        require(name == "drive_c" || name == "drive_d")
+        val directory = File(workspace, name)
+        if (
+            Files.isSymbolicLink(directory.toPath()) ||
+            !directory.isDirectory ||
+            directory.canonicalFile.parentFile != workspace.canonicalFile
+        ) {
+            throw IOException("The Capsule " + name + " directory is missing or unsafe.")
+        }
+        return directory.canonicalFile
     }
 
     private fun validateGuestMountPath(path: String, capsuleId: String, drive: String) {

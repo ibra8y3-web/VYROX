@@ -1,107 +1,104 @@
-# Windows Wine Prefix Architecture
+# Windows Runtime, Wine Prefix and Desktop Integration
 
-## Current status
+## Status at a glance
 
-**Prefix storage lifecycle and integrity validator implemented; Wine itself is not integrated.** `WinePrefixManager` can stage a per-Capsule prefix, validate the actual registry files and default drive links produced by a real `wineboot -u`, redirect C:/D: to the Capsule's guest mount targets, then atomically activate and inspect the prefix. The selected Capsule's UI now reads and displays only a verified prefix record from its ARM64 RootFS. It never fabricates Registry files. No app action invokes Wine yet, so VYROX does not currently create a valid Wine prefix, install a Windows application through Wine, or launch a Windows PE file. An empty directory with a `system.reg` placeholder is not a Wine prefix and must never be shown as ready.
+The repository now contains source paths for installing WineHQ stable, creating a real per-Capsule prefix, running EXE/MSI files through Wine and Box64, showing the Linux/Wine desktop through VNC, bridging PCM audio to Android, discovering installed executables, and installing pinned DXVK/VKD3D-Proton releases.
 
-The current target is an ARM64 Android device running an imported ARM64 glibc Linux RootFS under the CI-built Android PRoot package. Box64 has a pinned in-RootFS build action that will require a successful x86-64 syscall smoke test before the app marks it installed.
+**These paths are implemented in source but still require successful CI and physical Android device tests.** Do not treat source code, a passing unit test, downloaded package, or DLL-presence check as proof that a Windows application runs correctly on a phone.
 
-## Chosen compatibility path
+## Selected architecture
 
-1. **Android host:** arm64-v8a, no Android root required.
-2. **Linux guest:** an imported ARM64 Debian/Ubuntu glibc RootFS.
-3. **Linux x86-64 translator:** Box64 v0.4.4 inside that RootFS.
-4. **Windows API compatibility:** Wine 11.0 x86-64 WoW64, loaded through Box64.
-5. **Prefix:** a separate, real Wine prefix for each Capsule.
-6. **Graphics:** begin with Wine's software/fallback path; add DXVK only after device Vulkan and driver validation.
+1. Android ARM64 hosts the VYROX app and its Android-compatible PRoot binary.
+2. Each Capsule imports an ARM64 Debian/Ubuntu glibc RootFS.
+3. Box64 is built inside that RootFS and checked as an AArch64 ELF plus a minimal x86-64 Linux syscall smoke test.
+4. WineHQ stable amd64 packages are installed into the RootFS and the x86-64 Wine loader is invoked through Box64.
+5. Each Capsule receives a separate Wine prefix under `/opt/vyrox/prefixes/<capsule-id>`.
+6. The Capsule's existing app-private C:/D: folders are mounted at the guest drive targets.
+7. EXE/MSI installers execute inside the selected prefix; the desktop viewer displays the X11 session over a localhost-only RFB/VNC connection.
+8. DXVK/VKD3D-Proton are optional prefix-level graphics translation layers and only install after a guest-side Vulkan probe succeeds.
 
-Wine 11.0 was released on January 13, 2026. Its new WoW64 architecture is considered fully supported, can run 32-bit Windows applications within a 64-bit prefix, and uses a single `wine` loader rather than the former separate `wine64` loader. Wine's release notes state that pure 32-bit prefixes are deprecated in the new WoW64 mode. WineHQ's latest development release by November 10, 2026 is 11.21 (October 30, 2026), while 11.0 remains the stable baseline. VYROX keeps the stable channel as its minimum and does not silently promote a development build. See the [Wine 11.0 release notes](https://www.winehq.org/news/2026011301) and [WineHQ news archive](https://www.winehq.org/news/).
+Box64 translates x86-64 Linux ELF programs; it does not load Windows PE files. Wine supplies the Windows API compatibility layer.
 
-Box64 translates x86-64 **Linux ELF** programs; it does not load Windows PE files. Wine supplies the Windows API layer. Both components must be present and separately verified before Windows execution can be attempted. See [Box64's upstream usage and Wine guidance](https://github.com/ptitSeb/box64#usage).
+## Wine package installation
 
-## Per-Capsule prefix layout
+`WineRuntimePlan.createInstallShellScript()` is the source for the WineHQ installation action. It:
 
-The proposed guest-side layout is:
+- Accepts the configured Debian/Ubuntu RootFS codenames explicitly supported by the script.
+- Enables the amd64 package architecture inside that guest RootFS.
+- Adds the WineHQ signing key and a WineHQ stable source scoped to the guest's OS ID/codename.
+- Installs WineHQ stable, X11/VNC, PulseAudio, icon-extraction and Vulkan diagnostic packages.
+- Finds the x86-64 Wine loader and Windows `wineboot.exe` payload.
+- Checks the loader's ELF machine, Wine version (11 or newer), and the PE header of `wineboot.exe`.
+- Writes the Wine metadata record only after those checks pass.
 
-```text
-/opt/vyrox/
-  prefixes/
-    <capsule-id>/
-      drive_c/             # linked to the Capsule's persistent C: contents
-      dosdevices/
-        c: -> ../drive_c
-        d: -> <Capsule D: mount>
-        z: -> /
-      system.reg
-      user.reg
-      userdef.reg
-      user/
-      wineserver
-      .vyrox-prefix.properties
-```
+The package install is a guest RootFS operation under PRoot fake-root mapping. It does not grant Android root or modify Android's host package database. The exact package layout can vary by distribution and WineHQ packaging; a successful install action must still be confirmed on the target RootFS.
 
-The final structure must follow the paths and symbolic-link semantics produced by the chosen Wine build's own `wineboot`. The sketch above is an architectural target, not a set of files the app should fabricate.
+## Real per-Capsule prefix
 
-Each Capsule has its own prefix ID, registry, user profile, installed applications, configuration and snapshot lifecycle. Prefix creation must never reuse another Capsule's `WINEPREFIX`.
+`WinePrefixManager` provides a transactional lifecycle:
 
-The C: and D: drive targets must map only to that Capsule's app-private C:/D: storage. The bind source paths must be validated by the existing PRoot command planner and remain under approved VYROX storage roots. A mounted directory is a path mapping, not a security sandbox.
+1. Validate the Capsule ID, existing C:/D: storage, RootFS and destination path.
+2. Create a private staging directory for that Capsule's prefix.
+3. Mount the Capsule's C: and D: directories at the expected guest paths.
+4. Run the real Wine loader through Box64 with `WINEPREFIX` set to the staging directory and invoke `wineboot -u`.
+5. Require successful process exit, real Wine version output, registry files and expected drive-link targets.
+6. Atomically move the verified staging prefix into `/opt/vyrox/prefixes/<capsule-id>`.
+7. Re-inspect it before the UI marks it ready.
 
-## Read-only Wine package preflight
+The app must never create placeholder `system.reg` files or label a partially initialized directory as a Wine prefix. A failed stage is removed without overwriting an already working prefix.
 
-The Capsule's ARM64 RootFS panel includes **Check Wine packages**. It does not install packages or alter the APT configuration. It reads the existing OS metadata and APT indexes, verifies an ARM64 Debian/Ubuntu guest, checks whether `amd64` is already enabled, reads the `wine` wrapper and `libwine:amd64` candidates, reports the optional legacy `wine64:amd64` candidate for diagnosis, and runs `apt-get -s install wine libwine:amd64` so APT simulates the dependency graph selected by the configured repositories.
+## EXE and MSI flow
 
-The check blocks if the foreign architecture is missing, wrapper/library candidates are unavailable or versions do not match, Wine is older than 11.0, APT cannot resolve the package set, or the simulation proposes removing installed packages. It does not require a separately named `wine64` package: Wine 11's new WoW64 mode uses the unified `wine` loader. VYROX will not silently add a foreign architecture, change repository sources, refresh indexes or install Wine. A passing preflight only says the currently configured package indexes appear coherent; it is not a Wine installation or prefix-creation result.
+The user first imports the executable into the selected Capsule's C: or D: drive through the file manager. The Run action accepts EXE and MSI entries from that Capsule only:
 
-## Actual prefix creation and readiness gate
+- EXE: Box64 starts the x86-64 Wine loader with the selected guest file path.
+- MSI: Box64 starts the same Wine loader with `msiexec /i <path>`.
+- Both use the Capsule's verified `WINEPREFIX`, not a shared global prefix.
 
-A future Wine manager must:
+The process has bounded logs, an execution timeout and a Stop action. After the process exits, VYROX refreshes the Capsule's file listing and scans common installation folders for executable applications. Windows icons are extracted from PE resources with `wrestool`/`icotool` and the app list uses the detected executable paths. Discovery is heuristic; not every Windows application registers itself in one of the scanned folders.
 
-1. Confirm that the selected Capsule has a valid ARM64 glibc RootFS.
-2. Confirm Box64's pinned metadata and a passed x86-64 smoke marker.
-3. Verify the installed Wine package's source, version, architecture and license.
-4. Execute the real Wine loader through Box64 with a new prefix path in the selected RootFS.
-5. Let Wine create the prefix using `wineboot -u`; never manually forge Wine registry files.
-6. Verify that the process exited successfully, required registry files exist and are readable, drive links resolve to the Capsule's own C:/D: mount points, and the Wine version can be queried from the same prefix.
-7. Write VYROX prefix metadata only after the whole operation passes.
-8. Keep a bounded process log and remove only a failed staging prefix; do not overwrite a working prefix on a partial failure.
+The separate Installer Library stores imported setup files in app-private Android storage. To run one, the file must first be copied/imported into the selected Capsule's C: or D: drive.
 
-The first implementation should use a 64-bit prefix compatible with Wine's new WoW64 path. Do not create legacy `WINEARCH=win32` prefixes for this architecture.
+## Desktop, input and audio path
 
-## Package acquisition and multiarch constraints
+The current source starts:
 
-The Wine binary needed by Box64 is an **amd64 Linux ELF** plus its x86-64 runtime libraries. An ARM64 RootFS cannot execute that binary natively. APT's multiarch system can install foreign-architecture packages, but only when the configured repository publishes that architecture and the package dependencies are coherent. Debian documents adding a foreign architecture with `dpkg --add-architecture`; it also warns that multiarch application packages and libraries need matching package versions. See the [Debian Wine guide](https://wiki.debian.org/Wine) and [Debian Multiarch HOWTO](https://wiki.debian.org/Multiarch/HOWTO).
+- Xvfb for the guest display.
+- Fluxbox as the guest window manager.
+- x11vnc bound to localhost only.
+- A VYROX RFB 3.8 client that decodes the framebuffer into the Android viewer.
+- Touch pointer, drag, keyboard key events and text-entry forwarding.
+- A PulseAudio monitor pipeline that streams 48 kHz signed 16-bit stereo PCM to an Android AudioTrack bridge.
 
-The future installer must inspect the RootFS distribution, codename, configured APT source architectures and package candidate versions before changing package configuration. It must stop with a clear diagnostic when the official repository does not publish the selected distribution/architecture. It must not blindly mix Debian suites, Ubuntu suites, WineHQ repositories or third-party packages.
+The viewer is an in-app view of the guest desktop. It is not a native Android window for each Windows process. These bridges still need on-device testing for display negotiation, latency, keyboard layouts, process lifecycle, and audio reliability.
 
-Wine 11.0 is the selected initial target because of its completed WoW64 mode. The exact package source, signing key, package version and dependencies must still be pinned and checked for the selected RootFS before a Wine installer is enabled.
+## DXVK and VKD3D-Proton
 
-## Installing and launching EXE/MSI after Wine integration
+`GraphicsTranslationPlan` pins:
 
-The planned sequence is:
+- DXVK 3.1.1 for selected Direct3D 9/10/11 interfaces.
+- VKD3D-Proton 3.1 for Direct3D 12.
 
-- Keep the imported EXE/MSI in VYROX's app-private installer store.
-- Bind only that selected installer file into the selected Capsule's guest session.
-- Start the ARM64 Box64 binary inside PRoot, passing the x86-64 Wine loader and the selected prefix.
-- For EXE, invoke the Wine loader with the guest-visible installer path.
-- For MSI, invoke the same Wine loader with its `msiexec` entry point and the installer path.
-- Wait for process exit, preserve a bounded log, report the actual exit status and refresh the Capsule's file listing.
-- Never call the installer "installed" unless Wine's real prefix/application state confirms it.
+The installation plan downloads the official release archives inside the RootFS, checks the archive contents, invokes the upstream setup scripts with Wine wrappers routed through Box64, and checks the expected 32-bit/64-bit DLL files in the Capsule's Windows directories. It writes prefix metadata only after those checks pass.
 
-No install/run buttons should be enabled until the Wine package and prefix readiness gates pass.
+The Vulkan probe may report a software Vulkan backend such as lavapipe. That is not Android GPU acceleration. Presence of Vulkan, DXVK/VKD3D DLLs, or a successful installer script does not prove a Direct3D workload renders. Real game/software tests against the target Android device's Vulkan driver remain required.
 
-## Engine status
+## Readiness and validation matrix
 
-| Component | Current state |
-|---|---|
-| Android PRoot source build and APK packaging | Built and ELF-checked by CI; physical-device ptrace/execve still unverified |
-| ARM64 glibc RootFS import/validation | Implemented; physical-device execution still unverified |
-| Box64 v0.4.4 source build | Wired into the app; requires a successful in-RootFS build and smoke test when run |
-| Wine 11.0 WoW64 | Architecture chosen; binaries/packages not integrated |
-| Per-Capsule Wine prefixes | Transactional storage/verification manager, symlink-ticket protection, tests and UI integrity status implemented; no real prefix is created until Wine/wineboot is integrated |
-| EXE/MSI installation and launch | Not integrated |
-| DXVK/VKD3D-Proton | Not integrated |
-| Keyboard, pointer, controller, window and audio bridges | Not integrated |
+| Layer | Source implementation | Still required |
+|---|---|---|
+| Android PRoot | CI builds and packages Android PRoot plus its loader | Physical-device ptrace/execve and RootFS shell tests |
+| ARM64 RootFS | Import validation and staged extraction | Test supported Debian/Ubuntu images on phone |
+| Box64 | Pinned build action, metadata checks and syscall smoke | Run build and general x86-64 Linux workload on phone |
+| WineHQ stable | Guest installation script and loader checks | Confirm package paths and loader behavior on device |
+| Wine Prefix | Real wineboot flow, registry/drive validation, atomic activation | Create and inspect prefix on device |
+| EXE/MSI | Run action in selected Capsule prefix | Install and launch known-good Windows test apps on phone |
+| Program icons | PE resource extraction and common-folder scan | Confirm icon extraction against installed software |
+| Screen/input | Xvfb, Fluxbox, x11vnc, RFB viewer, touch/keyboard forwarding | Confirm rendering, resize, drag, key input and latency on device |
+| Audio | PulseAudio PCM to Android AudioTrack | Confirm real audio stream and lifecycle on device |
+| DXVK/VKD3D-Proton | Pinned archive install and DLL checks | Confirm driver support and D3D9/11/12 rendering workloads |
+| Security isolation | App-private file separation and PRoot path mapping | Not VM-grade isolation; do not treat as a security sandbox |
 
-## Non-goals and safety boundary
+## Security boundary
 
-PRoot's guest-only fake-root identity does not grant Android superuser access and is not a security boundary. Capsules and Wine prefixes provide separate storage and runtime configuration, not hardened isolation from hostile applications. Do not run untrusted installers without an appropriate isolation and risk model.
+Capsules are logically separated file-backed workspaces. PRoot's guest fake-root identity is not Android superuser access and is not a hardened isolation boundary. Wine applications execute within the app-managed Linux guest process and may access the files made available to that process. Do not run untrusted Windows installers under the assumption that Capsule storage prevents malicious behavior.

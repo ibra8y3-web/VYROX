@@ -50,8 +50,8 @@ The build needs a working network connection for APT and Git and sufficient free
 | Manifest and Kotlin tests | Added; CI pending |
 | Box64 build action and x86-64 syscall smoke on a physical Android phone | Not yet run by this project; the app action performs it when invoked |
 | A general x86-64 Linux application workload on the phone | Not yet verified; only a minimal syscall smoke program is included |
-| Wine/WOW64, Windows EXE/MSI installation and launch | Not integrated |
-| DXVK/VKD3D-Proton and Direct3D graphics | Not integrated |
-| Full Windows display, audio, keyboard and gamepad bridge | Not integrated |
+| Wine/WOW64, Windows EXE/MSI installation and launch | Guest Wine install, real prefix and Capsule EXE/MSI launch paths are implemented in source; physical-device tests pending |
+| DXVK/VKD3D-Proton and Direct3D graphics | Pinned install plans and DLL verification implemented; physical-device rendering pending |
+| Windows display, audio and keyboard/pointer bridge | Xvfb/VNC viewer and PCM/audio/input paths implemented; physical-device reliability tests pending. Gamepad not implemented |
 
 A successful APK build only validates Android source compilation and packaging. It does not prove Box64 can build or execute on a given physical device.
