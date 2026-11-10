@@ -149,10 +149,11 @@ class ProotCommandPlannerTest {
         File(rootFs, "etc").mkdirs()
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
-        File(rootFs, "bin/sh").apply {
-            writeText("#!/bin/sh")
-            setExecutable(true)
-        }
+        File(rootFs, ".vyrox-rootfs.properties").writeText(
+            "architecture=ARM64\\narchiveSha256=" + "c".repeat(64) + "\\n"
+        )
+        File(rootFs, "bin/sh").writeBytes(arm64ElfHeader())
+        File(rootFs, "bin/sh").setExecutable(true)
         val proot = File(root, "proot").apply {
             writeText("binary placeholder")
             setExecutable(true)
