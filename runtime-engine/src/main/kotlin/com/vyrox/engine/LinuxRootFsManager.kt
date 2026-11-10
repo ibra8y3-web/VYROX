@@ -269,7 +269,7 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
             }
         }
 
-        resolveHardLinks(staging, hardLinks)
+        expandedBytes = resolveHardLinks(staging, hardLinks, expandedBytes)
         return ExtractionResult(expandedBytes, entryCount)
     }
 
@@ -301,7 +301,12 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
         return copied
     }
 
-    private fun resolveHardLinks(staging: File, links: MutableList<PendingHardLink>) {
+    private fun resolveHardLinks(
+        staging: File,
+        links: MutableList<PendingHardLink>,
+        initialExpandedBytes: Long
+    ): Long {
+        var expandedBytes = initialExpandedBytes
         var pending = links.toList()
         var progress: Boolean
         do {
@@ -321,12 +326,40 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
                 if (Files.exists(link.destination.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
                     throw IOException("Hard-link destination already exists.")
                 }
+
+                val sourceSize = source.length()
+                if (sourceSize < 0L) {
+                    throw IOException("RootFS hard-link target has an invalid size.")
+                }
                 try {
                     Files.createLink(link.destination.toPath(), source.toPath())
                 } catch (_: Exception) {
-                    source.inputStream().buffered().use { input ->
-                        link.destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                    // Some app-private filesystems do not support hard links.
+                    // A copy fallback consumes real disk space, so count it
+                    // against the same expanded RootFS budget as regular files.
+                    if (sourceSize > MAX_EXPANDED_BYTES - expandedBytes) {
+                        throw IOException("Hard-link fallback copies exceed the 16 GiB extraction limit.")
                     }
+                    var copied = 0L
+                    source.inputStream().buffered().use { input ->
+                        link.destination.outputStream().buffered().use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                if (read == 0) continue
+                                copied += read
+                                if (copied > sourceSize || copied > MAX_EXPANDED_BYTES - expandedBytes) {
+                                    throw IOException("Hard-link fallback copy exceeded its size budget.")
+                                }
+                                output.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                    if (copied != sourceSize) {
+                        throw IOException("Hard-link fallback copy did not match its source size.")
+                    }
+                    expandedBytes += copied
                 }
                 progress = true
             }
@@ -336,6 +369,7 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
         if (pending.isNotEmpty()) {
             throw IOException("RootFS contains a hard link whose target is missing or unsafe.")
         }
+        return expandedBytes
     }
 
     private fun createSafeSymbolicLink(

@@ -2,6 +2,7 @@ package com.vyrox.engine
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+import org.apache.commons.compress.archivers.tar.TarConstants
 import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -95,6 +96,51 @@ class LinuxRootFsManagerTest {
         assertThrows(IOException::class.java) {
             manager.importArchive(CAPSULE_ID, "incomplete.tar", ByteArrayInputStream(archive))
         }
+    }
+
+    @Test
+    fun resolvesTarHardLinksAfterTheirTargetEntryAppears() {
+        val capsuleRoot = createCapsuleRoot()
+        val manager = LinuxRootFsManager(capsuleRoot)
+        val output = ByteArrayOutputStream()
+        TarArchiveOutputStream(output).use { tar ->
+            val osRelease = "ID=ubuntu\\nVERSION_ID=24.04\\n".toByteArray()
+            val osEntry = TarArchiveEntry("etc/os-release").apply { size = osRelease.size.toLong() }
+            tar.putArchiveEntry(osEntry)
+            tar.write(osRelease)
+            tar.closeArchiveEntry()
+
+            val hardLink = TarArchiveEntry("usr/bin/sh", TarConstants.LF_LINK).apply {
+                linkName = "bin/sh"
+                size = 0L
+            }
+            tar.putArchiveEntry(hardLink)
+            tar.closeArchiveEntry()
+
+            val binDirectory = TarArchiveEntry("bin/").apply { size = 0L }
+            tar.putArchiveEntry(binDirectory)
+            tar.closeArchiveEntry()
+
+            val shell = createElfHeader(183)
+            val shellEntry = TarArchiveEntry("bin/sh").apply { size = shell.size.toLong() }
+            tar.putArchiveEntry(shellEntry)
+            tar.write(shell)
+            tar.closeArchiveEntry()
+            tar.finish()
+        }
+
+        val imported = manager.importArchive(
+            CAPSULE_ID,
+            "hard-links.tar",
+            ByteArrayInputStream(output.toByteArray())
+        )
+        assertEquals(LinuxRootFsArchitecture.ARM64, imported.architecture)
+        val linkedShell = File(
+            File(capsuleRoot, CAPSULE_ID),
+            "linux/rootfs-arm64/usr/bin/sh"
+        )
+        assertTrue(linkedShell.isFile)
+        assertTrue(linkedShell.readBytes().contentEquals(createElfHeader(183)))
     }
 
     @Test
