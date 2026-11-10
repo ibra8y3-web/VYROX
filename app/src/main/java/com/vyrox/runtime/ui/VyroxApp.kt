@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
+import com.vyrox.runtime.core.capsule.CapsuleSnapshotInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.engine.RuntimeCompatibilityPlanner
@@ -88,7 +89,16 @@ fun VyroxApp(
     onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
-    onExtractZipEntry: (CapsuleFileEntry) -> Unit
+    onExtractZipEntry: (CapsuleFileEntry) -> Unit,
+    onCloneCapsule: (CapsuleInfo) -> Unit,
+    onRenameCapsule: (CapsuleInfo, String) -> Unit,
+    onCreateCapsuleSnapshot: (CapsuleInfo) -> Unit,
+    onManageCapsuleSnapshots: (CapsuleInfo) -> Unit,
+    onRestoreCapsuleSnapshot: (CapsuleInfo, CapsuleSnapshotInfo) -> Unit,
+    onDeleteCapsuleSnapshot: (CapsuleInfo, CapsuleSnapshotInfo) -> Unit,
+    onCloseCapsuleSnapshotManager: () -> Unit,
+    onBackupCapsule: (CapsuleInfo) -> Unit,
+    onImportCapsuleBackup: () -> Unit
 ) {
     var capsuleName by remember { mutableStateOf("") }
     var folderName by remember(selectedCapsule?.id, selectedDrive, currentPath) {
@@ -97,6 +107,8 @@ fun VyroxApp(
     var pendingDeleteEntry by remember { mutableStateOf<CapsuleFileEntry?>(null) }
     var pendingRenameEntry by remember { mutableStateOf<CapsuleFileEntry?>(null) }
     var renameValue by remember { mutableStateOf("") }
+    var pendingRenameCapsule by remember { mutableStateOf<CapsuleInfo?>(null) }
+    var capsuleRenameValue by remember { mutableStateOf("") }
     var destinationPath by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
     var searchQuery by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
 
@@ -155,6 +167,15 @@ fun VyroxApp(
                     onImportRootFs = onImportRootFs,
                     onRemoveRootFs = onRemoveRootFs,
                     onExtractZipEntry = onExtractZipEntry,
+                    onCloneCapsule = onCloneCapsule,
+                    onRenameCapsule = { capsule ->
+                        pendingRenameCapsule = capsule
+                        capsuleRenameValue = capsule.name
+                    },
+                    onCreateCapsuleSnapshot = onCreateCapsuleSnapshot,
+                    onManageCapsuleSnapshots = onManageCapsuleSnapshots,
+                    onBackupCapsule = onBackupCapsule,
+                    onImportCapsuleBackup = onImportCapsuleBackup,
                     onToggleDesktopMode = onToggleDesktopMode
                 )
             } else {
@@ -216,6 +237,13 @@ fun VyroxApp(
                         ) {
                             Text("Create Capsule")
                         }
+                        OutlinedButton(
+                            onClick = onImportCapsuleBackup,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isImporting
+                        ) {
+                            Text("Import Capsule backup")
+                        }
                         if (capsules.isEmpty()) {
                             Text(
                                 "No Capsules created yet.",
@@ -227,7 +255,15 @@ fun VyroxApp(
                                     CapsuleRow(
                                         capsule = capsule,
                                         onOpen = onOpenCapsule,
-                                        onDelete = onDeleteCapsule
+                                        onDelete = onDeleteCapsule,
+                                        onClone = onCloneCapsule,
+                                        onRename = { selected ->
+                                            pendingRenameCapsule = selected
+                                            capsuleRenameValue = selected.name
+                                        },
+                                        onSnapshot = onCreateCapsuleSnapshot,
+                                        onManageSnapshots = onManageCapsuleSnapshots,
+                                        onBackup = onBackupCapsule
                                     )
                                 }
                             }
@@ -372,6 +408,91 @@ fun VyroxApp(
             }
             }
         }
+    }
+
+
+    if (snapshotManagerCapsule != null) {
+        val capsule = snapshotManagerCapsule
+        AlertDialog(
+            onDismissRequest = onCloseCapsuleSnapshotManager,
+            title = { Text("Snapshots — " + (capsule?.name ?: "")) },
+            text = {
+                if (capsuleSnapshots.isEmpty()) {
+                    Text("No snapshots have been created for this Capsule.")
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .height(320.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        capsuleSnapshots.forEach { snapshot ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(snapshot.fileName, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        formatBytes(snapshot.sizeBytes) + " • SHA-256 " + snapshot.sha256.take(16) + "...",
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = {
+                                                capsule?.let { onRestoreCapsuleSnapshot(it, snapshot) }
+                                            },
+                                            enabled = capsule != null && !isImporting
+                                        ) { Text("Restore") }
+                                        OutlinedButton(
+                                            onClick = {
+                                                capsule?.let { onDeleteCapsuleSnapshot(it, snapshot) }
+                                            },
+                                            enabled = capsule != null && !isImporting
+                                        ) { Text("Delete") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                OutlinedButton(onClick = onCloseCapsuleSnapshotManager) { Text("Close") }
+            }
+        )
+    }
+
+    if (pendingRenameCapsule != null) {
+        val capsule = pendingRenameCapsule
+        AlertDialog(
+            onDismissRequest = { pendingRenameCapsule = null },
+            title = { Text("Rename Capsule") },
+            text = {
+                OutlinedTextField(
+                    value = capsuleRenameValue,
+                    onValueChange = { capsuleRenameValue = it },
+                    singleLine = true,
+                    label = { Text("New Capsule name") }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        capsule?.let { onRenameCapsule(it, capsuleRenameValue) }
+                        pendingRenameCapsule = null
+                    },
+                    enabled = capsuleRenameValue.trim().length >= 2
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { pendingRenameCapsule = null }) { Text("Cancel") }
+            }
+        )
     }
 
     if (pendingRenameEntry != null) {
@@ -844,34 +965,52 @@ private fun CapsuleFileRow(
 internal fun CapsuleRow(
     capsule: CapsuleInfo,
     onOpen: (CapsuleInfo) -> Unit,
-    onDelete: (CapsuleInfo) -> Unit
+    onDelete: (CapsuleInfo) -> Unit,
+    onClone: (CapsuleInfo) -> Unit,
+    onRename: (CapsuleInfo) -> Unit,
+    onSnapshot: (CapsuleInfo) -> Unit,
+    onManageSnapshots: (CapsuleInfo) -> Unit,
+    onBackup: (CapsuleInfo) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(capsule.name, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "C: system folders • D: data folders • private app storage",
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(capsule.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "C: system folders • D: data folders • private app storage",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                OutlinedButton(onClick = { onOpen(capsule) }) { Text("Open") }
+                OutlinedButton(onClick = { onDelete(capsule) }) { Text("Delete") }
             }
-            OutlinedButton(onClick = { onOpen(capsule) }) {
-                Text("Open")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                OutlinedButton(onClick = { onClone(capsule) }, modifier = Modifier.weight(1f)) { Text("Clone") }
+                OutlinedButton(onClick = { onRename(capsule) }, modifier = Modifier.weight(1f)) { Text("Rename") }
+                OutlinedButton(onClick = { onBackup(capsule) }, modifier = Modifier.weight(1f)) { Text("Backup") }
             }
-            OutlinedButton(onClick = { onDelete(capsule) }) {
-                Text("Delete")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                OutlinedButton(onClick = { onSnapshot(capsule) }, modifier = Modifier.weight(1f)) { Text("Snapshot") }
+                OutlinedButton(onClick = { onManageSnapshots(capsule) }, modifier = Modifier.weight(1f)) { Text("Manage snapshots") }
             }
         }
     }

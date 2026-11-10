@@ -113,6 +113,12 @@ internal fun DesktopShell(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
+    onCloneCapsule: (CapsuleInfo) -> Unit,
+    onRenameCapsule: (CapsuleInfo) -> Unit,
+    onCreateCapsuleSnapshot: (CapsuleInfo) -> Unit,
+    onManageCapsuleSnapshots: (CapsuleInfo) -> Unit,
+    onBackupCapsule: (CapsuleInfo) -> Unit,
+    onImportCapsuleBackup: () -> Unit,
     onToggleDesktopMode: () -> Unit
 ) {
     val windows = remember {
@@ -266,6 +272,12 @@ internal fun DesktopShell(
                                     onImportRootFs = onImportRootFs,
                                     onRemoveRootFs = onRemoveRootFs,
                                     onExtractZipEntry = onExtractZipEntry,
+                                    onCloneCapsule = onCloneCapsule,
+                                    onRenameCapsule = onRenameCapsule,
+                                    onCreateCapsuleSnapshot = onCreateCapsuleSnapshot,
+                                    onManageCapsuleSnapshots = onManageCapsuleSnapshots,
+                                    onBackupCapsule = onBackupCapsule,
+                                    onImportCapsuleBackup = onImportCapsuleBackup,
                                     onOpenPanel = ::openPanel
                                 )
                             }
@@ -513,6 +525,12 @@ private fun DesktopPanelContent(
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
+    onCloneCapsule: (CapsuleInfo) -> Unit,
+    onRenameCapsule: (CapsuleInfo) -> Unit,
+    onCreateCapsuleSnapshot: (CapsuleInfo) -> Unit,
+    onManageCapsuleSnapshots: (CapsuleInfo) -> Unit,
+    onBackupCapsule: (CapsuleInfo) -> Unit,
+    onImportCapsuleBackup: () -> Unit,
     onOpenPanel: (DesktopPanel) -> Unit
 ) {
     Column(
@@ -564,6 +582,13 @@ private fun DesktopPanelContent(
                         ) {
                             Text("Create Capsule")
                         }
+                        OutlinedButton(
+                            onClick = onImportCapsuleBackup,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isImporting
+                        ) {
+                            Text("Import Capsule backup")
+                        }
                     }
                 }
                 if (capsules.isEmpty()) {
@@ -573,7 +598,12 @@ private fun DesktopPanelContent(
                         CapsuleRow(
                             capsule = capsule,
                             onOpen = onOpenCapsule,
-                            onDelete = onDeleteCapsule
+                            onDelete = onDeleteCapsule,
+                            onClone = onCloneCapsule,
+                            onRename = onRenameCapsule,
+                            onSnapshot = onCreateCapsuleSnapshot,
+                            onManageSnapshots = onManageCapsuleSnapshots,
+                            onBackup = onBackupCapsule
                         )
                     }
                 }

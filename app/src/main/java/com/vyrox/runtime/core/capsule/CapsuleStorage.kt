@@ -664,6 +664,9 @@ class CapsuleStorage(private val capsuleRoot: File) {
                 ) {
                     throw IOException("Capsule drive layout is incomplete.")
                 }
+                if (!destinationDrive.deleteRecursively() || !destinationDrive.mkdir()) {
+                    throw IOException("Could not prepare the cloned " + driveName + " drive.")
+                }
                 sourceDrive.listFiles().orEmpty().forEach { child ->
                     copyNode(child, File(destinationDrive, child.name), budget)
                 }
@@ -1027,28 +1030,12 @@ class CapsuleStorage(private val capsuleRoot: File) {
                 if (count > 0) digest.update(buffer, 0, count)
             }
         }
-        val manifest = readBackupManifest(file)
         return CapsuleSnapshotInfo(
             fileName = file.name,
-            createdAtEpochMillis = manifest.getProperty("createdAtEpochMillis")?.toLongOrNull()
-                ?: file.lastModified(),
+            createdAtEpochMillis = file.lastModified(),
             sizeBytes = file.length(),
             sha256 = digest.digest().joinToString("") { "%02x".format(it) }
         )
-    }
-
-    private fun readBackupManifest(file: File): Properties {
-        val properties = Properties()
-        ZipInputStream(file.inputStream().buffered()).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                if (entry.name == CAPSULE_BACKUP_MANIFEST) {
-                    properties.load(zip.readBytesLimited(MAX_BACKUP_MANIFEST_BYTES).inputStream())
-                    break
-                }
-            }
-        }
-        return properties
     }
 
     private fun InputStream.readBytesLimited(maximum: Int): ByteArray {
@@ -1164,7 +1151,7 @@ class CapsuleStorage(private val capsuleRoot: File) {
         const val CAPSULE_SNAPSHOT_EXTENSION = ".vxsnapshot"
         const val MAX_BACKUP_MANIFEST_BYTES = 16 * 1024
         const val MAX_SEARCH_RESULTS: Int = 500
-        val SNAPSHOT_FILE_PATTERN = Regex("snapshot-[0-9]{10,17}-[0-9a-f]{8}\.vxsnapshot")
+        val SNAPSHOT_FILE_PATTERN = Regex("snapshot-[0-9]{10,17}-[0-9a-f]{8}[.]vxsnapshot")
         const val MAX_SEARCH_VISITED: Int = 20_000
 
         val INITIAL_DIRECTORY_PATHS = listOf(

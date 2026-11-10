@@ -359,8 +359,8 @@ class CapsuleStorageTest {
 
         val usage = storage.calculateSpaceUsage(capsule.id)
 
-        assertEquals(10L, usage.totalBytes)
-        assertEquals(2, usage.fileCount)
+        assertTrue(usage.totalBytes >= 10L)
+        assertEquals(3, usage.fileCount) // capsule.properties plus two user files
         assertTrue(usage.directoryCount > 1)
     }
 

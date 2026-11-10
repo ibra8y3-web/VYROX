@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleStorage
+import com.vyrox.runtime.core.capsule.CapsuleSnapshotInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
 import com.vyrox.runtime.core.engine.ProotExecutableLocator
@@ -39,15 +40,18 @@ class MainActivity : ComponentActivity() {
     private var prootBinaryAvailable by mutableStateOf(false)
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
+    private val capsuleSnapshots = mutableStateListOf<CapsuleSnapshotInfo>()
     private val capsuleEntries = mutableStateListOf<CapsuleFileEntry>()
     private val capsuleSearchResults = mutableStateListOf<CapsuleFileEntry>()
     private val rootFsImages = mutableStateListOf<LinuxRootFsInfo>()
 
     private var selectedCapsule by mutableStateOf<CapsuleInfo?>(null)
+    private var snapshotManagerCapsule by mutableStateOf<CapsuleInfo?>(null)
     private var selectedDrive by mutableStateOf('C')
     private var selectedPath by mutableStateOf("")
     private var pendingCapsuleImport: CapsuleImportTarget? = null
     private var pendingRootFsCapsuleId: String? = null
+    private var pendingCapsuleBackupId: String? = null
 
     private var isImporting by mutableStateOf(false)
     private var statusMessage by mutableStateOf<String?>(null)
@@ -74,6 +78,21 @@ class MainActivity : ComponentActivity() {
         if (uri != null && capsuleId != null) importRootFsArchive(uri, capsuleId)
     }
 
+    private val createCapsuleBackup = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        val capsuleId = pendingCapsuleBackupId
+        pendingCapsuleBackupId = null
+        if (uri != null && capsuleId != null) exportCapsuleBackup(uri, capsuleId)
+    }
+
+    private val openCapsuleBackup = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) importCapsuleBackup(uri)
+    }
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         desktopModeEnabled = savedInstanceState?.getBoolean(STATE_DESKTOP_MODE) ?: true
@@ -98,6 +117,8 @@ class MainActivity : ComponentActivity() {
             VyroxApp(
                 installers = installers.toList(),
                 capsules = capsules.toList(),
+                capsuleSnapshots = capsuleSnapshots.toList(),
+                snapshotManagerCapsule = snapshotManagerCapsule,
                 selectedCapsule = selectedCapsule,
                 selectedDrive = selectedDrive,
                 currentPath = selectedPath,
@@ -137,7 +158,16 @@ class MainActivity : ComponentActivity() {
                 onSelectCapsuleSearchResult = ::selectCapsuleSearchResult,
                 onImportRootFs = ::requestRootFsImport,
                 onRemoveRootFs = ::removeRootFs,
-                onExtractZipEntry = ::extractZipEntry
+                onExtractZipEntry = ::extractZipEntry,
+                onCloneCapsule = ::cloneCapsule,
+                onRenameCapsule = ::renameCapsule,
+                onCreateCapsuleSnapshot = ::createCapsuleSnapshot,
+                onManageCapsuleSnapshots = ::manageCapsuleSnapshots,
+                onRestoreCapsuleSnapshot = ::restoreCapsuleSnapshot,
+                onDeleteCapsuleSnapshot = ::deleteCapsuleSnapshot,
+                onCloseCapsuleSnapshotManager = ::closeCapsuleSnapshotManager,
+                onBackupCapsule = ::requestCapsuleBackup,
+                onImportCapsuleBackup = ::requestImportCapsuleBackup
             )
         }
     }
@@ -221,6 +251,181 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not delete the Capsule."
+            }
+        }
+    }
+
+
+    private fun cloneCapsule(capsule: CapsuleInfo) {
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Cloning Capsule files..."
+            try {
+                val cloned = withContext(Dispatchers.IO) {
+                    capsuleStorage.cloneCapsule(capsule.id, capsule.name + " Copy")
+                }
+                capsules.add(0, cloned)
+                statusMessage = "Cloned " + capsule.name + " into " + cloned.name
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not clone this Capsule."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun renameCapsule(capsule: CapsuleInfo, newName: String) {
+        lifecycleScope.launch {
+            try {
+                val renamed = withContext(Dispatchers.IO) {
+                    capsuleStorage.renameCapsule(capsule.id, newName)
+                }
+                val index = capsules.indexOfFirst { it.id == capsule.id }
+                if (index >= 0) capsules[index] = renamed
+                if (selectedCapsule?.id == capsule.id) selectedCapsule = renamed
+                statusMessage = "Renamed Capsule to " + renamed.name
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not rename this Capsule."
+            }
+        }
+    }
+
+    private fun createCapsuleSnapshot(capsule: CapsuleInfo) {
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Creating Capsule snapshot..."
+            try {
+                val snapshot = withContext(Dispatchers.IO) {
+                    capsuleStorage.createSnapshot(capsule.id)
+                }
+                statusMessage = "Snapshot saved (" + snapshot.sizeBytes + " bytes, SHA-256 " +
+                    snapshot.sha256.take(12) + "...)"
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not create a Capsule snapshot."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun manageCapsuleSnapshots(capsule: CapsuleInfo) {
+        lifecycleScope.launch {
+            try {
+                val snapshots = withContext(Dispatchers.IO) {
+                    capsuleStorage.listSnapshots(capsule.id)
+                }
+                snapshotManagerCapsule = capsule
+                capsuleSnapshots.clear()
+                capsuleSnapshots.addAll(snapshots)
+                statusMessage = "Found " + snapshots.size + " Capsule snapshots."
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not list Capsule snapshots."
+            }
+        }
+    }
+
+    private fun restoreCapsuleSnapshot(capsule: CapsuleInfo, snapshot: CapsuleSnapshotInfo) {
+        if (isImporting) return
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Restoring Capsule snapshot..."
+            try {
+                withContext(Dispatchers.IO) {
+                    capsuleStorage.restoreSnapshot(capsule.id, snapshot.fileName)
+                }
+                statusMessage = "Restored snapshot " + snapshot.fileName
+                if (selectedCapsule?.id == capsule.id) {
+                    selectedPath = ""
+                    capsuleEntries.clear()
+                    refreshCapsuleDirectory()
+                }
+                manageCapsuleSnapshots(capsule)
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not restore the Capsule snapshot."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun deleteCapsuleSnapshot(capsule: CapsuleInfo, snapshot: CapsuleSnapshotInfo) {
+        if (isImporting) return
+        lifecycleScope.launch {
+            try {
+                val deleted = withContext(Dispatchers.IO) {
+                    capsuleStorage.deleteSnapshot(capsule.id, snapshot.fileName)
+                }
+                if (deleted) {
+                    capsuleSnapshots.removeAll { it.fileName == snapshot.fileName }
+                    statusMessage = "Deleted snapshot " + snapshot.fileName
+                } else {
+                    statusMessage = "The selected snapshot could not be deleted."
+                }
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not delete the Capsule snapshot."
+            }
+        }
+    }
+
+    private fun closeCapsuleSnapshotManager() {
+        snapshotManagerCapsule = null
+        capsuleSnapshots.clear()
+    }
+
+    private fun requestCapsuleBackup(capsule: CapsuleInfo) {
+        if (isImporting) return
+        pendingCapsuleBackupId = capsule.id
+        val safeName = capsule.name
+            .replace(Regex("[^A-Za-z0-9._-]+"), "_")
+            .trim('_')
+            .ifBlank { "VYROX-Capsule" }
+        createCapsuleBackup.launch("$safeName.vxcapsule.zip")
+    }
+
+    private fun exportCapsuleBackup(uri: Uri, capsuleId: String) {
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Exporting Capsule backup..."
+            try {
+                withContext(Dispatchers.IO) {
+                    val output = contentResolver.openOutputStream(uri, "w")
+                        ?: throw IOException("Android could not open the backup destination.")
+                    output.use { capsuleStorage.exportCapsuleBackup(capsuleId, it) }
+                }
+                statusMessage = "Capsule backup exported successfully."
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not export the Capsule backup."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+    private fun requestImportCapsuleBackup() {
+        if (isImporting) return
+        openCapsuleBackup.launch(arrayOf("application/zip", "application/octet-stream"))
+    }
+
+    private fun importCapsuleBackup(uri: Uri) {
+        if (isImporting) return
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Validating and importing Capsule backup..."
+            try {
+                val displayName = queryDisplayName(uri)
+                val baseName = displayName.substringBeforeLast('.').take(48).trim()
+                val restoredName = (baseName.ifBlank { "Imported Capsule" }) + " Restored"
+                val restored = withContext(Dispatchers.IO) {
+                    val input = contentResolver.openInputStream(uri)
+                        ?: throw IOException("Android could not open the Capsule backup.")
+                    input.use { capsuleStorage.importCapsuleBackup(restoredName, it) }
+                }
+                capsules.add(0, restored)
+                statusMessage = "Restored Capsule backup as " + restored.name
+            } catch (exception: Exception) {
+                statusMessage = exception.message ?: "Could not import this Capsule backup."
+            } finally {
+                isImporting = false
             }
         }
     }
