@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/vyrox-hero.svg" alt="VYROX — A Complete PC Runtime Inside Android" width="100%">
+  <img src="docs/images/vyrox-hero.svg" alt="VYROX desktop runtime for Android" width="100%">
 </p>
 
 <p align="center">
@@ -13,46 +13,59 @@
 
 # VYROX
 
-**VYROX is an open-source desktop-style runtime project hosted by Android.** It is designed to organize file-separated workspaces, manage imported Windows installers, and grow toward a tested Windows compatibility stack.
+VYROX is an open-source Android application project that builds a desktop-style workspace around Linux RootFS images, per-Capsule storage, and a developing Windows compatibility runtime.
 
-> **Important current limitation:** VYROX does not run Windows EXE/MSI programs yet. Installer import is only file import into private app storage; ZIP extraction writes files into a Capsule but does not install or execute a Windows program. Capsules are file-based workspaces, not virtual machines or hardened security sandboxes. Wine, CPU translation, and DirectX translation are not integrated.
+> **Development status:** runtime installation and launch paths now exist in the source, but VYROX is not yet a verified replacement for a Windows PC. A successful APK build does not prove that Wine, Box64, Vulkan, or a Windows application works on a physical phone. See the implementation and device-validation matrix below.
 
-## Visual architecture
+## Desktop experience
 
-<p align="center">
-  <img src="docs/images/vyrox-architecture.svg" alt="VYROX architecture map and integration status" width="100%">
-</p>
+The landscape-first desktop opens to a wallpaper-style workspace. Its settings and navigation expose Capsule management, C:/D: file management, installer import, RootFS/Box64/Wine controls, runtime status, and Arabic/English language selection. Opening a Capsule provides its own files and installed-program list. A Windows session is presented in an in-app desktop viewer rather than launched as an Android application.
 
-## What is implemented in the source
+## Implemented source paths
 
-| Area | Current implementation |
+| Area | Current source implementation |
 |---|---|
-| Android application | Kotlin, Jetpack Compose, Android document picker |
-| Desktop interface | Landscape-first shell, phone-admin orientation switch, Start menu, taskbar, multiple movable/resizable windows |
-| Installer library | Imports EXE/MSI/ZIP files into private app storage; validates PE/COFF, MSI compound-file and ZIP directory headers; securely extracts ZIP files only inside a selected Capsule; does not execute them |
-| Capsule workspaces | Create/list/delete/rename/clone app-private workspaces with independent C:/D: folder trees, portable ZIP backups, checksummed snapshots, restore and storage accounting |
-| File manager | Browse, create, import, copy, move, rename, search, delete and safely extract ZIP archives within Capsule storage |
-| Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
-| Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
-| Runtime management | PRoot session start/timeout/stop for Wine package preflight, Box64 build and Linux RootFS shell probe; bounded logs and a visible Stop control |\n| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning and pinned Box64 0.4.4 source-build action inside an ARM64 glibc RootFS |
-| Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging; Box64 has a separate in-RootFS source-build recipe (not an APK library) |
+| Android application | Kotlin, Jetpack Compose, Android document picker, app-private storage |
+| Desktop shell | Desktop workspace, settings panel, navigation to Capsules, files, installer library and runtime tools; Arabic RTL and English LTR |
+| Capsule workspaces | Separate logical C:/D: folders; create, rename, clone, backup, checksummed snapshots and restore |
+| File manager | Browse, import, create, copy, move, rename, search, delete and safe ZIP extraction within a Capsule |
+| Installer inspection | EXE/PE, MSI and ZIP format inspection; app-private installer library |
+| Linux RootFS | TAR/TAR.GZ/TAR.XZ import, staged extraction, path/size validation and metadata |
+| PRoot | Pinned Android native build and APK packaging workflow; guest command planner, bind-mount validation, bounded logs and process stop/timeout |
+| Box64 | Pinned v0.4.4 source-build action inside an ARM64 glibc RootFS, with ELF/version and minimal x86-64 syscall smoke checks |
+| Wine | WineHQ stable amd64 package-install script through Box64; checks Wine 11+ loader metadata |
+| Wine Prefix | Per-Capsule staging, real `wineboot -u`, registry/drive-link verification and atomic activation |
+| EXE/MSI path | Capsule file-manager Run action; EXE starts through Wine, MSI uses `msiexec /i` |
+| Program discovery | Scans common C: install folders and extracts Windows executable icons for the Capsule's app list |
+| Windows display/input | Xvfb + Fluxbox + localhost x11vnc; RFB framebuffer viewer, touch pointer/drag, keyboard text and key events |
+| Audio | PulseAudio PCM monitor bridge to Android AudioTrack |
+| Graphics translation | Pinned DXVK 3.1.1 and VKD3D-Proton 3.1 install plan with Vulkan preflight and DLL/metadata verification |
 
-**Source implementation is not the same as verified runtime behavior.** The CI badge reports the latest GitHub Actions result. Native execution and Windows compatibility still require successful Android builds and physical-device testing.
+**The rows above describe source implementation, not end-to-end device certification.** The runtime may still fail on a phone because of Android/PRoot ptrace behavior, Box64 ABI/library compatibility, Wine package layout, Vulkan driver availability, or application-specific Windows dependencies.
 
-Capsule backup and snapshot operations are file-level archives. They preserve the Capsule's current C:/D: data folders and metadata needed to identify a backup format; they do not capture a live process, running Windows registry, or VM memory image. Restoring a snapshot replaces the file-backed C:/D: trees after staging and validation.
+## What is still unverified or incomplete
 
-## What is not implemented
+- Build and run Box64 on a real Android phone and test a general x86-64 Linux workload beyond the minimal syscall smoke program.
+- Install WineHQ stable in a real imported RootFS, create a prefix with real `wineboot`, and confirm Wine version/registry/drive mappings on-device.
+- Install and launch redistributable EXE and MSI test applications on a physical ARM64 phone.
+- Verify VNC screen updates, mouse/keyboard input and Android audio bridge during a real Windows session.
+- Confirm DXVK/VKD3D DLLs install successfully in a real prefix, then run Direct3D 9/11/12 test workloads against the device's actual Vulkan driver.
+- Add a real Android GPU/Vulkan bridge where the device and driver support it. Detecting Vulkan or installing translation DLLs alone is not proof of hardware acceleration.
+- Improve isolation. Capsules and PRoot currently provide file separation and rootless Linux path redirection; they are not VMs or hardened security sandboxes.
 
-- Wine or another Windows API compatibility layer.
-- Running Windows EXE/MSI installers or launching Windows applications and games.
-- Box64 built and executed on a physical Android device. The source includes a pinned v0.4.4 build action for an ARM64 Debian/Ubuntu RootFS, but that action and x86-64 execution are not yet device-verified. FEX is not integrated.
-- DXVK, VKD3D-Proton, DirectX execution, or validated graphics translation.
-- A working Windows registry and independent Wine Prefix for each Capsule.
-- VM-grade isolation, malware scanning, or a hardened security sandbox.
-- Verified PRoot ptrace and Linux RootFS execution on a physical Android device.
-- Process, memory, temperature, GPU-frequency or CPU-frequency controls beyond what Android exposes to an ordinary app.
+## Runtime boundaries
 
-## Build requirements
+- **PRoot** provides Linux filesystem/process redirection. It does not provide Windows APIs, CPU translation, Android root, or a security boundary.
+- **Box64** translates x86-64 Linux ELF programs on ARM64 Linux. It does not load Windows PE files by itself.
+- **Wine** provides Windows API compatibility. It must run inside the compatible Linux RootFS through the selected CPU translation path.
+- **DXVK** translates selected Direct3D 8/9/10/11 interfaces to Vulkan. **VKD3D-Proton** targets Direct3D 12. Neither replaces Wine or Box64.
+- The graphics installer records a backend only after the guest-side Vulkan probe reports a device/software backend and the expected DLL files exist. Real rendering still requires a game or graphics test on the target phone.
+
+Capsule backups and snapshots are file-level archives. They do not capture a running process, live Windows memory, or a virtual-machine image. Do not run untrusted installers under the assumption that a Capsule is a malware sandbox.
+
+## Build and CI
+
+Requirements:
 
 - JDK 17
 - Android SDK Platform 36 and Build Tools 36.0.0
@@ -62,34 +75,25 @@ Capsule backup and snapshot operations are file-level archives. They preserve th
 - Android Gradle Plugin 8.13.2
 - Kotlin 2.2.21
 
-Run from the repository root after installing the Android SDK components:
+Run from the repository root:
 
-~~~bash
+```bash
 gradle :runtime-engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-~~~
+```
 
-The GitHub Actions workflow runs source-manifest checks, unit tests, the pinned ARM64 PRoot build, Android lint and debug APK assembly. When all required stages pass, the APK is uploaded as the vyrox-debug-apk artifact. Failed build output is retained in a diagnostic artifact where the corresponding stage runs.
+GitHub Actions runs Python source-manifest checks, the pinned Android PRoot native build, JVM/unit tests, Android lint and debug APK assembly. A debug APK is uploaded only after the required job steps pass. Failed Gradle output is collected into a build-diagnostic artifact.
 
 ## Project layout
 
-~~~text
-app/                 Android UI, storage and JNI bridge
-runtime-engine/      Runtime catalog, RootFS, command planning and process supervision
+```text
+app/                 Android UI, storage, VNC/audio bridges and runtime orchestration
+runtime-engine/      RootFS, Box64, Wine, prefix and graphics installation plans
 scripts/             Reproducible native build and source validation helpers
 third_party/         Pinned source and license metadata
-docs/                Architecture and component documentation
+docs/                Architecture, runtime and third-party component documentation
 .github/workflows/   Android CI
-~~~
+```
 
-## Building Box64 inside a Capsule\n\nThe Runtime Manager includes a **Build Box64 0.4.4** action for an imported ARM64 Debian/Ubuntu RootFS. It fetches the immutable upstream v0.4.4 commit, builds with ARM64 DynaRec and PRoot mixed-kernel settings, and checks the installed AArch64 ELF plus version metadata. The action uses PRoot guest root identity only; it does not grant Android root. It binds only the required device nodes, `/proc`, and a temporary DNS configuration obtained from Android's active network. This is an x86-64 Linux translator, not a Windows PE loader. Physical-device build and x86-64 execution remain unverified. See [the Box64 build guide](docs/BOX64_RUNTIME_BUILD.md).\n\n## Windows Prefix architecture\n\nThe intended Windows path is Wine 11.0 WoW64 through Box64, with one real Wine prefix per Capsule and explicit C:/D: mapping. Prefix storage validation and atomic activation code are implemented, but Wine/wineboot execution remains unintegrated; the app must not report an EXE/MSI installed until a real Wine process confirms it. See [the Wine Prefix architecture](docs/WINDOWS_PREFIX_ARCHITECTURE.md).\n\n## Wine package preflight\n\nThe ARM64 Linux RootFS panel includes a read-only Wine amd64 package check. It inspects existing APT candidates and simulates dependency resolution; it does not enable foreign architectures, edit repositories, refresh package indexes or install Wine. A passing preflight is not an installed Wine runtime or a created prefix. See [the Wine Prefix architecture](docs/WINDOWS_PREFIX_ARCHITECTURE.md).\n\n## Component boundaries
+## License
 
-- **PRoot** is a Linux filesystem/process redirection tool. It is not a Windows API layer, CPU translator, or security boundary.
-- **Box64/FEX** target Linux x86/x86-64 userspace execution on ARM64 Linux; they do not load Windows PE files by themselves.
-- **Wine** provides Windows API compatibility and must be built/configured for the selected Android/Linux userland.
-- **DXVK/VKD3D-Proton** translate selected Direct3D interfaces over Vulkan; neither replaces Wine or a CPU translator.
-
-Every native component must have a pinned upstream version, license notices, Android ABI build evidence, and device-test results before being declared integrated.
-
-## Contribution and license
-
-VYROX is licensed under [Apache-2.0](LICENSE). Before proposing or adding a runtime binary, document its upstream source, exact version, license, ABI, build method, and physical-device test results.
+VYROX application source is licensed under [Apache-2.0](LICENSE). Runtime dependencies retain their own licenses; see [third-party component notes](docs/THIRD_PARTY_COMPONENTS.md). Before shipping runtime binaries, include the matching upstream license notices and review redistribution obligations.
