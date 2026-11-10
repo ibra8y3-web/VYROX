@@ -57,12 +57,12 @@ object GraphicsTranslationPlan {
                 exit 63
             }
 
-            VULKANINFO_BIN="$(command -v vulkaninfo 2>/dev/null || true)"
+            VULKANINFO_BIN="@D@(command -v vulkaninfo 2>/dev/null || true)"
             test -n "@D@VULKANINFO_BIN" && test -f "@D@VULKANINFO_BIN" || {
                 echo "The RootFS has no vulkaninfo binary; Vulkan is not available."
                 exit 61
             }
-            VULKANINFO_MACHINE="$(od -An -tu2 -j18 -N2 "@D@VULKANINFO_BIN" 2>/dev/null | tr -d ' ' || true)"
+            VULKANINFO_MACHINE="@D@(od -An -tu2 -j18 -N2 "@D@VULKANINFO_BIN" 2>/dev/null | tr -d ' ' || true)"
             if [ "@D@VULKANINFO_MACHINE" = "62" ]; then
                 for icd in /usr/share/vulkan/icd.d/lvp_icd.x86_64.json /etc/vulkan/icd.d/lvp_icd.x86_64.json; do
                     if [ -f "@D@icd" ]; then export VK_ICD_FILENAMES="@D@icd"; break; fi
@@ -126,7 +126,7 @@ object GraphicsTranslationPlan {
             "@D@DXVK_DIR/setup_dxvk.sh" install --with-d3d10 --without-dxgi
             "@D@VKD3D_DIR/setup_vkd3d_proton.sh" install
 
-            CAPSULE_C="$(readlink -f "@D@PREFIX/drive_c")"
+            CAPSULE_C="@D@(readlink -f "@D@PREFIX/drive_c")"
             test -d "@D@CAPSULE_C" || {
                 echo "The Capsule C: drive symlink could not be resolved." >&2
                 exit 70
@@ -135,10 +135,10 @@ object GraphicsTranslationPlan {
                 /mnt/vyrox/capsules/*/drive_c) ;;
                 *) echo "The Capsule C: drive escaped the VYROX storage root." >&2; exit 70 ;;
             esac
-            WINDOWS_DIR="$(find "@D@CAPSULE_C" -mindepth 1 -maxdepth 1 -type d -iname windows -print -quit)"
+            WINDOWS_DIR="@D@(find "@D@CAPSULE_C" -mindepth 1 -maxdepth 1 -type d -iname windows -print -quit)"
             test -n "@D@WINDOWS_DIR"
-            SYSTEM32="$(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname system32 -print -quit)"
-            SYSWOW64="$(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname syswow64 -print -quit)"
+            SYSTEM32="@D@(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname system32 -print -quit)"
+            SYSWOW64="@D@(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname syswow64 -print -quit)"
             test -n "@D@SYSTEM32" && test -n "@D@SYSWOW64"
             for dll in d3d9.dll d3d10core.dll d3d11.dll dxgi.dll; do
                 test -s "@D@SYSTEM32/@D@dll" || { echo "DXVK did not install 64-bit @D@dll."; exit 71; }
