@@ -19,9 +19,6 @@ class WineRuntimePlanTest {
         assertTrue(script.contains("x11vnc"))
         assertTrue(script.contains("icoutils"))
         assertTrue(script.contains("VYROX_WINE_READY"))
-        assertTrue(script.contains("vulkaninfo"))
-        assertTrue(script.contains("BOX64"))
-        assertTrue(script.contains("vulkan_backend="))
     }
 
     @Test
@@ -103,80 +100,6 @@ class WineRuntimePlanTest {
         }
     }
 
-    @Test
-    fun graphicsTranslationScriptDownloadsPinnedDxvkAndVkd3dAndInstallsIntoThisPrefix() {
-        val root = wineRoot()
-        try {
-            val script = WineRuntimePlan.createGraphicsTranslationInstallScript(
-                "/opt/vyrox/prefixes/123e4567-e89b-12d3-a456-426614174000",
-                root
-            )
-            assertTrue(script.contains("dxvk-3.1.1.tar.gz"))
-            assertTrue(script.contains("vkd3d-proton-3.1.tar.zst"))
-            assertTrue(script.contains("setup_dxvk.sh"))
-            assertTrue(script.contains("setup_vkd3d_proton.sh"))
-            assertTrue(script.contains("VYROX_GRAPHICS_TRANSLATION_READY"))
-            assertTrue(script.contains("VYROX_WINE_LOADER"))
-            assertTrue(script.contains("WINEPREFIX"))
-            assertFalse(script.contains("/usr/bin/wine "))
-        } finally {
-            root.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun graphicsTranslationRequiresDetectedVulkan() {
-        val root = wineRoot()
-        try {
-            val metadata = File(root, WineRuntimePlan.METADATA_PATH)
-            metadata.writeText(metadata.readText().replace(
-                "vulkan_backend=lavapipe-software",
-                "vulkan_backend=unavailable"
-            ))
-            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-                WineRuntimePlan.createGraphicsTranslationInstallScript(
-                    "/opt/vyrox/prefixes/123e4567-e89b-12d3-a456-426614174000",
-                    root
-                )
-            }
-        } finally {
-            root.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun graphicsTranslationReadinessRequiresDllsAndMatchingMetadata() {
-        val root = wineRoot()
-        val capsuleC = Files.createTempDirectory("vyrox-graphics-capsule-c").toFile()
-        try {
-            val windows = File(capsuleC, "windows")
-            val system32 = File(windows, "system32")
-            val syswow64 = File(windows, "syswow64")
-            check(system32.mkdirs())
-            check(syswow64.mkdirs())
-            val dxvkDlls = listOf("d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll")
-            (dxvkDlls + listOf("d3d12.dll", "d3d12core.dll")).forEach {
-                File(system32, it).writeText("dll")
-            }
-            dxvkDlls.forEach { File(syswow64, it).writeText("dll") }
-            val prefix = File(root, "opt/vyrox/prefixes/123e4567-e89b-12d3-a456-426614174000")
-            check(prefix.mkdirs())
-            File(prefix, "vyrox-graphics.properties").writeText(
-                """
-                dxvk_version=3.1.1
-                vkd3d_proton_version=3.1
-                vulkan_backend=lavapipe-software
-                """.trimIndent()
-            )
-            assertTrue(WineRuntimePlan.isGraphicsTranslationInstalled(prefix, capsuleC))
-            File(syswow64, "d3d11.dll").delete()
-            assertFalse(WineRuntimePlan.isGraphicsTranslationInstalled(prefix, capsuleC))
-        } finally {
-            root.deleteRecursively()
-            capsuleC.deleteRecursively()
-        }
-    }
-
     private fun wineRoot(): File {
         val root = Files.createTempDirectory("vyrox-wine-plan").toFile()
         val loader = File(root, "usr/lib/wine/wine64")
@@ -197,7 +120,6 @@ class WineRuntimePlanTest {
             loader=/usr/lib/wine/wine64
             wineboot=/usr/lib/x86_64-linux-gnu/wine/x86_64-windows/wineboot.exe
             source=WineHQ-stable
-            vulkan_backend=lavapipe-software
             """.trimIndent()
         )
         File(root, Box64BuildPlan.BINARY_RELATIVE_PATH).apply {
