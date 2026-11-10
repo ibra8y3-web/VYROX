@@ -76,7 +76,7 @@ class RuntimeProcessSupervisorTest {
         val logs = temporaryFolder.newFolder("invalid-argument-logs")
         val supervisor = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin")))
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
-            supervisor.start(shellPlan(working, listOf("-c", "bad\\u0000argument")), "invalid-argument")
+            supervisor.start(shellPlan(working, listOf("-c", "bad\u0000argument")), "invalid-argument")
         }
         assertFalse(File(logs, "invalid-argument.log").exists())
     }

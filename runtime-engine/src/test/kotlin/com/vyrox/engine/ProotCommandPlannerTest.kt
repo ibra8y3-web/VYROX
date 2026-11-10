@@ -21,7 +21,7 @@ class ProotCommandPlannerTest {
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
         File(rootFs, ".vyrox-rootfs.properties").writeText(
-            "architecture=ARM64\\narchiveSha256=" + "a".repeat(64) + "\\n"
+            "architecture=ARM64\narchiveSha256=" + "a".repeat(64) + "\n"
         )
         File(rootFs, "bin/sh").writeBytes(arm64ElfHeader())
         File(rootFs, "bin/sh").setExecutable(true)
@@ -112,7 +112,7 @@ class ProotCommandPlannerTest {
         File(outside, "bin/sh").writeBytes(arm64ElfHeader())
         File(outside, "bin/sh").setExecutable(true)
         File(outside, ".vyrox-rootfs.properties").writeText(
-            "architecture=ARM64\\narchiveSha256=" + "b".repeat(64) + "\\n"
+            "architecture=ARM64\narchiveSha256=" + "b".repeat(64) + "\n"
         )
         assertThrows(IllegalArgumentException::class.java) {
             ProotCommandPlanner.build(
@@ -150,7 +150,7 @@ class ProotCommandPlannerTest {
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
         File(rootFs, ".vyrox-rootfs.properties").writeText(
-            "architecture=ARM64\\narchiveSha256=" + "c".repeat(64) + "\\n"
+            "architecture=ARM64\narchiveSha256=" + "c".repeat(64) + "\n"
         )
         File(rootFs, "bin/sh").writeBytes(arm64ElfHeader())
         File(rootFs, "bin/sh").setExecutable(true)
