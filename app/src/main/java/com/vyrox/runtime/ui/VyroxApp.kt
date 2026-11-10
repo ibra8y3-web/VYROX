@@ -68,6 +68,8 @@ fun VyroxApp(
     prootBinaryAvailable: Boolean,
     isImporting: Boolean,
     statusMessage: String?,
+    isDesktopMode: Boolean,
+    onToggleDesktopMode: () -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: (String) -> Unit,
@@ -102,6 +104,58 @@ fun VyroxApp(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            if (isDesktopMode) {
+                DesktopShell(
+                    installers = installers,
+                    capsules = capsules,
+                    selectedCapsule = selectedCapsule,
+                    selectedDrive = selectedDrive,
+                    currentPath = currentPath,
+                    capsuleEntries = capsuleEntries,
+                    capsuleSearchResults = capsuleSearchResults,
+                    rootFsImages = rootFsImages,
+                    hostCapabilities = hostCapabilities,
+                    prootBinaryAvailable = prootBinaryAvailable,
+                    isImporting = isImporting,
+                    statusMessage = statusMessage,
+                    capsuleName = capsuleName,
+                    onCapsuleNameChange = { capsuleName = it },
+                    folderName = folderName,
+                    onFolderNameChange = { folderName = it },
+                    destinationPath = destinationPath,
+                    onDestinationPathChange = { destinationPath = it },
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    onImport = onImport,
+                    onDeleteInstaller = onDeleteInstaller,
+                    onCreateCapsule = {
+                        onCreateCapsule(capsuleName)
+                        capsuleName = ""
+                    },
+                    onDeleteCapsule = onDeleteCapsule,
+                    onOpenCapsule = onOpenCapsule,
+                    onCloseCapsuleExplorer = onCloseCapsuleExplorer,
+                    onSelectCapsuleDrive = onSelectCapsuleDrive,
+                    onNavigateCapsuleDirectory = onNavigateCapsuleDirectory,
+                    onCreateCapsuleDirectory = {
+                        onCreateCapsuleDirectory(folderName)
+                        folderName = ""
+                    },
+                    onImportIntoCapsule = onImportIntoCapsule,
+                    onDeleteCapsuleEntry = { pendingDeleteEntry = it },
+                    onRenameCapsuleEntry = {
+                        pendingRenameEntry = it
+                        renameValue = it.name
+                    },
+                    onCopyCapsuleEntry = { onCopyCapsuleEntry(it, destinationPath) },
+                    onMoveCapsuleEntry = { onMoveCapsuleEntry(it, destinationPath) },
+                    onSearchCapsuleEntries = { onSearchCapsuleEntries(searchQuery) },
+                    onSelectCapsuleSearchResult = onSelectCapsuleSearchResult,
+                    onImportRootFs = onImportRootFs,
+                    onRemoveRootFs = onRemoveRootFs,
+                    onToggleDesktopMode = onToggleDesktopMode
+                )
+            } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -120,6 +174,9 @@ fun VyroxApp(
                         text = "Windows runtime environment for Android",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                     )
+                    OutlinedButton(onClick = onToggleDesktopMode) {
+                        Text("Switch to desktop workspace")
+                    }
                 }
 
 
@@ -310,6 +367,7 @@ fun VyroxApp(
                     }
                 }
             }
+            }
         }
     }
 
@@ -380,7 +438,7 @@ fun VyroxApp(
 
 
 @Composable
-private fun RuntimeEngineStatusCard(
+internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,
     prootBinaryAvailable: Boolean
@@ -465,7 +523,7 @@ private fun RuntimeEngineStatusCard(
 }
 
 @Composable
-private fun HostReadinessCard(profile: HostCapabilities) {
+internal fun HostReadinessCard(profile: HostCapabilities) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -515,7 +573,7 @@ private fun HostReadinessCard(profile: HostCapabilities) {
 }
 
 @Composable
-private fun CapsuleExplorerCard(
+internal fun CapsuleExplorerCard(
     capsule: CapsuleInfo,
     selectedDrive: Char,
     currentPath: String,
@@ -774,7 +832,7 @@ private fun CapsuleFileRow(
 }
 
 @Composable
-private fun CapsuleRow(
+internal fun CapsuleRow(
     capsule: CapsuleInfo,
     onOpen: (CapsuleInfo) -> Unit,
     onDelete: (CapsuleInfo) -> Unit
@@ -811,7 +869,7 @@ private fun CapsuleRow(
 }
 
 @Composable
-private fun InstallerRow(
+internal fun InstallerRow(
     installer: ImportedInstaller,
     onDelete: (ImportedInstaller) -> Unit
 ) {
@@ -848,7 +906,7 @@ private fun InstallerRow(
     }
 }
 
-private fun formatBytes(size: Long): String {
+internal fun formatBytes(size: Long): String {
     val megabytes = size / (1024.0 * 1024.0)
     return if (megabytes >= 1024.0) {
         String.format(Locale.US, "%.2f GB", megabytes / 1024.0)

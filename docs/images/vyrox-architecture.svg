@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">VYROX architecture and integration status</title>
+  <desc id="desc">Architecture map showing the Android host, desktop shell, Capsule storage, native Linux process layer and Windows compatibility components with their current implementation status.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#080f1d"/><stop offset="1" stop-color="#14223b"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#203d68"/><stop offset="1" stop-color="#1c3454"/></linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#123f42"/><stop offset="1" stop-color="#1c4c4a"/></linearGradient>
+    <linearGradient id="muted" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#352c48"/><stop offset="1" stop-color="#45304c"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#8fa8d8" stroke-width="1.6"/></marker>
+    <style>
+      .h{font:700 25px Inter,Segoe UI,Arial;fill:#f4f7ff}.t{font:500 18px Inter,Segoe UI,Arial;fill:#d8e2f6}
+      .s{font:600 14px Inter,Segoe UI,Arial;fill:#91a9ff;letter-spacing:1px}
+      .box{stroke:#6f8dbb;stroke-width:1.4;rx:18}.line{fill:none;stroke:#8fa8d8;stroke-width:2;marker-end:url(#arrow);opacity:.85}
+      .ok{fill:#7de0cc}.wait{fill:#f4c978}.off{fill:#d9a0ca}
+    </style>
+  </defs>
+  <rect width="1400" height="900" rx="28" fill="url(#canvas)"/>
+  <text x="70" y="68" class="h" font-size="34">VYROX SYSTEM MAP</text>
+  <text x="70" y="102" class="t" fill="#9eb0d0">Current source architecture • capability status is explicit</text>
+  <rect x="70" y="145" width="1260" height="112" class="box" fill="#101a2e"/>
+  <text x="105" y="188" class="s">HOST PLATFORM</text>
+  <text x="105" y="225" class="h">Android • App-private storage • NDK / JNI • Vulkan capability probe</text>
+  <circle cx="1240" cy="195" r="8" class="ok"/><text x="1260" y="201" class="t">in source</text>
+  <path d="M700 257V292" class="line"/>
+  <rect x="70" y="300" width="1260" height="120" class="box" fill="url(#blue)"/>
+  <text x="105" y="344" class="s">USER EXPERIENCE</text>
+  <text x="105" y="383" class="h">Desktop Shell • Start Menu • Taskbar • Window Manager • Phone Admin Mode</text>
+  <text x="1090" y="344" class="s">SOURCE STATUS</text><text x="1090" y="383" class="t wait">CI verification pending</text>
+  <path d="M700 420V452" class="line"/>
+  <rect x="70" y="460" width="600" height="150" class="box" fill="url(#teal)"/>
+  <text x="105" y="504" class="s">VYROX CORE + CAPSULES</text>
+  <text x="105" y="543" class="h">Workspace metadata • C:/D: folder trees</text>
+  <text x="105" y="578" class="t">Private import • file operations • staged RootFS archives</text>
+  <text x="105" y="599" class="s ok">IMPLEMENTED IN SOURCE</text>
+  <rect x="730" y="460" width="600" height="150" class="box" fill="#17243a"/>
+  <text x="765" y="504" class="s">NATIVE LINUX PROCESS LAYER</text>
+  <text x="765" y="543" class="h">PRoot • Bionic shared memory • Static loader</text>
+  <text x="765" y="578" class="t">Pinned and patched source build • Android ABI checks</text>
+  <text x="765" y="599" class="s wait">BUILD + DEVICE TEST NOT YET VERIFIED</text>
+  <path d="M370 610V647H700" class="line"/><path d="M1030 610V647H700" class="line"/>
+  <rect x="70" y="660" width="1260" height="170" class="box" fill="url(#muted)"/>
+  <text x="105" y="704" class="s">WINDOWS COMPATIBILITY STACK — NOT INTEGRATED</text>
+  <g>
+    <rect x="105" y="730" width="260" height="72" rx="12" fill="#202d47" stroke="#8a78a8"/>
+    <text x="130" y="760" class="h" font-size="21">Wine / VXR-WIN</text><text x="130" y="786" class="t off">not integrated</text>
+    <rect x="405" y="730" width="260" height="72" rx="12" fill="#202d47" stroke="#8a78a8"/>
+    <text x="430" y="760" class="h" font-size="21">Box64 / FEX</text><text x="430" y="786" class="t off">not integrated</text>
+    <rect x="705" y="730" width="260" height="72" rx="12" fill="#202d47" stroke="#8a78a8"/>
+    <text x="730" y="760" class="h" font-size="21">DXVK / Vulkan</text><text x="730" y="786" class="t off">not integrated</text>
+    <rect x="1005" y="730" width="280" height="72" rx="12" fill="#202d47" stroke="#8a78a8"/>
+    <text x="1030" y="760" class="h" font-size="21">Windows installers</text><text x="1030" y="786" class="t off">not executable</text>
+  </g>
+  <text x="70" y="870" class="t" fill="#93a6c9">Logical Capsule storage is not a virtual machine or a hardened security boundary.</text>
+</svg>

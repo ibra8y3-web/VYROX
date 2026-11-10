@@ -47,6 +47,7 @@ void test(void) {
         upstream = "#include <stdlib.h>\\n#include <signal.h>\\n"
         patched = patch_proot_memfd_source(upstream)
         self.assertIn("#include <string.h>", patched)
+        self.assertIn("#include <stdlib.h>\\n#include <string.h>", patched)
         self.assertEqual(patched, patch_proot_memfd_source(patched))
 
     def test_rejects_unexpected_proot_extension_source(self):

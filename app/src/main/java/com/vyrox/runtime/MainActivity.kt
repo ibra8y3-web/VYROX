@@ -3,6 +3,7 @@ package com.vyrox.runtime
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.content.pm.ActivityInfo
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +31,7 @@ import java.io.File
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
+    private var desktopModeEnabled by mutableStateOf(true)
     private lateinit var installerStorage: InstallerStorage
     private lateinit var capsuleStorage: CapsuleStorage
     private lateinit var hostCapabilities: HostCapabilities
@@ -74,6 +76,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        desktopModeEnabled = savedInstanceState?.getBoolean(STATE_DESKTOP_MODE) ?: true
+        requestedOrientation = if (desktopModeEnabled) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
 
         installerStorage = InstallerStorage(applicationContext)
         capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
@@ -100,6 +108,15 @@ class MainActivity : ComponentActivity() {
                 prootBinaryAvailable = prootBinaryAvailable,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
+                isDesktopMode = desktopModeEnabled,
+                onToggleDesktopMode = {
+                    desktopModeEnabled = !desktopModeEnabled
+                    requestedOrientation = if (desktopModeEnabled) {
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    }
+                },
                 onImport = {
                     if (!isImporting) openInstaller.launch(arrayOf("*/*"))
                 },
@@ -122,6 +139,11 @@ class MainActivity : ComponentActivity() {
                 onRemoveRootFs = ::removeRootFs
             )
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_DESKTOP_MODE, desktopModeEnabled)
+        super.onSaveInstanceState(outState)
     }
 
     private fun importInstaller(uri: Uri) {
@@ -506,5 +528,8 @@ class MainActivity : ComponentActivity() {
         return nameFromProvider
             ?.takeIf { it.isNotBlank() }
             ?: (uri.lastPathSegment ?: "installer.exe")
+    }
+    private companion object {
+        const val STATE_DESKTOP_MODE = "vyrox.desktop_mode"
     }
 }

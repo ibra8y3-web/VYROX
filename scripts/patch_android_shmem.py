@@ -62,7 +62,7 @@ def patch_proot_memfd_source(source: str) -> str:
     expected = "#include <stdlib.h>"
     if source.count(expected) != 1:
         raise ValueError("Pinned PRoot ashmem_memfd source no longer has the expected standard-library includes.")
-    return source.replace(expected, expected + "\\n" + include, 1)
+    return source.replace(expected, expected + "\n" + include, 1)
 
 
 def main() -> int:

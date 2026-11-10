@@ -1,145 +1,93 @@
+<p align="center">
+  <img src="docs/images/vyrox-hero.svg" alt="VYROX — A Complete PC Runtime Inside Android" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ibra8y3-web/VYROX/actions/workflows/android.yml"><img src="https://github.com/ibra8y3-web/VYROX/actions/workflows/android.yml/badge.svg" alt="Android CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-72d8c7.svg" alt="Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/platform-Android-91a9ff.svg" alt="Android">
+  <img src="https://img.shields.io/badge/host-ARM64%20first-91a9ff.svg" alt="ARM64 first">
+</p>
+
+<p align="center"><strong>Your PC. Your Phone. Your Environment.</strong></p>
+
 # VYROX
 
-**An open-source Windows application runtime environment for Android.**
+**VYROX is an open-source desktop-style runtime project hosted by Android.** It is designed to organize file-separated workspaces, manage imported Windows installers, and grow toward a tested Windows compatibility stack.
 
-VYROX is hosted by Android. It is not a replacement operating system. The project aims to provide managed workspaces ("Capsules") and, in later milestones, a tested compatibility runtime for selected Windows applications.
+> **Important current limitation:** VYROX does not run Windows EXE/MSI programs yet. Installer import is only file import into private app storage. Capsules are file-based workspaces, not virtual machines or hardened security sandboxes. Wine, CPU translation, and DirectX translation are not integrated.
 
-> **Current status: foundation milestone.** The Android source includes file-based Capsule workspaces and can import `.exe` and `.msi` installers into private app storage, list them, and remove them. It does not execute Windows programs. Capsule folders are not virtual machines or hardened security sandboxes. Wine, CPU translation, graphics translation, and Windows API compatibility are not integrated.
+## Visual architecture
 
-## Implemented in source
+<p align="center">
+  <img src="docs/images/vyrox-architecture.svg" alt="VYROX architecture map and integration status" width="100%">
+</p>
 
-- Native Android application shell built with Kotlin and Jetpack Compose.
-- Adaptive Android launcher icon for supported Android launchers.
-- System document picker for selecting installer files.
-- Private app-internal storage for imported installers.
-- File-extension validation and a 2 GiB import limit.
-- Temporary-file copy followed by rename, so incomplete copies are not shown as imported.
-- Local installer list and remove action.
-- Capsule workspace creation, listing, metadata persistence, and deletion in app-private storage.
-- Capsule file explorer with C:/D: navigation, folder creation, file import, and safe delete actions.
-- File-backed C: and D: directory layouts inside each new Capsule (not mounted Windows drives).
-- Device capability probe for supported Android ABIs, logical CPU count, total memory, and ARM64 host readiness.
-- JNI/C++ native bridge built with Android NDK and CMake; reports native architecture, pointer width, memory page size, CPU count, and Android API level.
-- Vulkan capability probe reports the physical device, API/driver versions, required DXVK extension names, push-constant size, and descriptor-indexing support when exposed by the driver.
-- Dedicated `:runtime-engine` Kotlin/JVM module with an upstream engine catalog, Vulkan capability parser, Windows x64 readiness planner, and PRoot command planner.
-- Linux RootFS TAR/TAR.GZ/TAR.XZ import per Capsule with architecture detection, SHA-256 metadata, safe staged extraction, and size/entry/path limits. This stages files only; no RootFS process is executed.
-- Validated PRoot command-plan generation that requires its Android ARM64 executable to come from the APK native-library directory, verifies an imported ARM64 RootFS, restricts bind mounts, and builds a safe argument vector; no PRoot binary is bundled or run.
-- Runtime process supervisor with timeout, explicit termination, bounded combined stdout/stderr capture, and private per-run logs; it is not a security sandbox and is not yet connected to a Windows engine.
-- PE/COFF header inspection for imported EXE files; detects x86, x86-64, ARM32, and ARM64 machine types before storing the installer.
-- MSI Compound File Binary signature check before storing an MSI database.
-- SHA-256 verified runtime package installer with ABI checks, ZIP traversal protection, archive limits, and private atomic installation.
-- PRoot APK packaging preflight requires the ARM64 PIE executable and its two pinned Android shared-library dependencies in the native-library directory; no such binary payload is bundled yet.
-- Unit tests for installer policy, Capsule metadata, workspace layout, path containment, file import, file operations, engine planning, and package installation.
-- GitHub Actions workflow for unit tests, Android lint, and debug APK assembly.
-- Deterministic build-failure diagnostic report uploaded as a separate artifact when CI fails.
+## What is implemented in the source
 
-These features are implemented in source. GitHub Actions is the verification gate; no feature is described as build-verified until a passing run confirms it.
+| Area | Current implementation |
+|---|---|
+| Android application | Kotlin, Jetpack Compose, Android document picker |
+| Desktop interface | Landscape-first shell, phone-admin orientation switch, Start menu, taskbar, multiple movable/resizable windows |
+| Installer library | Imports EXE/MSI files into private app storage; validates PE/COFF and MSI container signatures; does not execute them |
+| Capsule workspaces | Create/list/delete app-private workspaces with independent C:/D: folder trees and metadata |
+| File manager | Browse, create, import, copy, move, rename, search and delete files within Capsule storage |
+| Linux RootFS | Import and validate TAR/TAR.GZ/TAR.XZ images with staged extraction, path checks, size limits and SHA-256 metadata; does not execute them |
+| Device detection | Android ABI, CPU count, memory, native architecture and Vulkan capability probes |
+| Runtime planning | Engine catalog, Windows x64 prerequisite assessment, PRoot command planning and bounded process-log supervisor |
+| Native build | Pinned Android PRoot source build, AArch64 ELF checks and APK packaging preflight |
 
-## Not implemented
+**Source implementation is not the same as verified runtime behavior.** The CI badge reports the latest GitHub Actions result. Native execution and Windows compatibility still require successful Android builds and physical-device testing.
 
-- VM-grade Capsule isolation and independent Windows runtime environments (current Capsules are file-based storage workspaces only).
-- Mountable Windows drive mapping; the current file explorer operates on app-private file-backed directories only.
+## What is not implemented
+
 - Wine or another Windows API compatibility layer.
-- PRoot binary, Wine prefix, Box64/FEX translator, DXVK, or VKD3D-Proton runtime. Imported RootFS images are stored but not executed. The Termux PRoot source and its Android dependencies are pinned for a future Bionic build only.
-- x86/x64-to-ARM64 translation.
-- A Windows compatibility runtime, native CPU translator, or Windows process loader.
-- DXVK, VKD3D-Proton, DirectX execution, or validation of required Vulkan extensions/features.
-- Vulkan, DXVK, or DirectX translation.
-- Windows process execution or application launch.
-- Downloaded or bundled Wine/Box64/FEX/DXVK runtime packages; the package manager exists but no compatible packages are published or installed.
-- A hardened VM or security sandbox.
-- Malware scanning of imported installers.
+- Running Windows EXE/MSI installers or launching Windows applications and games.
+- x86/x64-to-ARM64 translation through Box64, FEX or another compatible translator.
+- DXVK, VKD3D-Proton, DirectX execution, or validated graphics translation.
+- A working Windows registry and independent Wine Prefix for each Capsule.
+- VM-grade isolation, malware scanning, or a hardened security sandbox.
+- Verified PRoot ptrace and Linux RootFS execution on a physical Android device.
+- Process, memory, temperature, GPU-frequency or CPU-frequency controls beyond what Android exposes to an ordinary app.
 
-## Build configuration
+## Build requirements
 
 - JDK 17
-- Android SDK Platform 36 (target SDK 35)
-- Android Gradle Plugin 8.13.2
+- Android SDK Platform 36 and Build Tools 36.0.0
+- Android NDK 27.2.12479018
+- CMake 3.22.1
 - Gradle 8.13
+- Android Gradle Plugin 8.13.2
 - Kotlin 2.2.21
-- Jetpack Compose BOM 2025.08.00
 
-Run from the repository root after installing the Android SDK platform and Gradle:
+Run from the repository root after installing the Android SDK components:
 
-```bash
+~~~bash
 gradle :runtime-engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-```
+~~~
 
-GitHub Actions runs the same checks on pushes and pull requests. When successful, it uploads `vyrox-debug-apk` as a workflow artifact. When a job fails, it captures Gradle output, generates a diagnostic Markdown report, and uploads `vyrox-build-diagnostic`. Dependabot checks Gradle and GitHub Actions dependencies weekly.
+The GitHub Actions workflow runs source-manifest checks, unit tests, the pinned ARM64 PRoot build, Android lint and debug APK assembly. When all required stages pass, the APK is uploaded as the vyrox-debug-apk artifact. Failed build output is retained in a diagnostic artifact where the corresponding stage runs.
 
-## Structure
+## Project layout
 
-```text
-.github/workflows/android.yml
-scripts/diagnose_build_failure.py
-scripts/tests/test_diagnose_build_failure.py
-app/src/main/
-  AndroidManifest.xml
-  java/com/vyrox/runtime/
-    MainActivity.kt
-    core/files/
-      InstallerPolicy.kt
-      InstallerStorage.kt
-      WindowsBinaryInspector.kt
-    core/capsule/
-      CapsulePolicy.kt
-      CapsuleFilePolicy.kt
-      CapsuleStorage.kt
-    core/host/
-      HostCapabilities.kt
-      NativeHostBridge.kt
-    core/engine/
-      RuntimePackageManager.kt
-    cpp/
-      CMakeLists.txt
-      vyrox_native.cpp
-    ui/VyroxApp.kt
-  res/values/
-app/src/test/java/com/vyrox/runtime/core/files/
-  InstallerPolicyTest.kt
-app/src/test/java/com/vyrox/runtime/core/capsule/
-  CapsulePolicyTest.kt
-  CapsuleStorageTest.kt
-app/src/test/java/com/vyrox/runtime/core/host/
-  HostCapabilitiesTest.kt
-app/src/test/java/com/vyrox/runtime/core/engine/
-  RuntimePackageManagerTest.kt
-  ProotExecutableLocatorTest.kt
-runtime-engine/
-  src/main/kotlin/com/vyrox/engine/RuntimeCatalog.kt
-  src/test/kotlin/com/vyrox/engine/RuntimeCatalogTest.kt
-  src/test/kotlin/com/vyrox/engine/LinuxRootFsManagerTest.kt
-  src/test/kotlin/com/vyrox/engine/ProotCommandPlannerTest.kt
-  src/test/kotlin/com/vyrox/engine/RuntimeProcessSupervisorTest.kt
-build.gradle.kts
-settings.gradle.kts
-gradle.properties
-LICENSE
-```
+~~~text
+app/                 Android UI, storage and JNI bridge
+runtime-engine/      Runtime catalog, RootFS, command planning and process supervision
+scripts/             Reproducible native build and source validation helpers
+third_party/         Pinned source and license metadata
+docs/                Architecture and component documentation
+.github/workflows/   Android CI
+~~~
 
-## PRoot source inventory\n\nThe pinned Android PRoot reference sources and license data are recorded in `third_party/proot-android.lock.json`; CI validates the lock. The source is not built or bundled in the APK yet.\n\n## Security notes
+## Component boundaries
 
-- Imported files are stored in the application's private internal directory and are not executed.
-- The import pipeline accepts only `.exe` and `.msi` filenames and enforces a maximum size.
-- File import is not malware scanning. Do not import or execute untrusted files.
-- The initial storage boundary is app-private storage, not a virtual machine or a hardened security boundary.
+- **PRoot** is a Linux filesystem/process redirection tool. It is not a Windows API layer, CPU translator, or security boundary.
+- **Box64/FEX** target Linux x86/x86-64 userspace execution on ARM64 Linux; they do not load Windows PE files by themselves.
+- **Wine** provides Windows API compatibility and must be built/configured for the selected Android/Linux userland.
+- **DXVK/VKD3D-Proton** translate selected Direct3D interfaces over Vulkan; neither replaces Wine or a CPU translator.
 
-## Roadmap
+Every native component must have a pinned upstream version, license notices, Android ABI build evidence, and device-test results before being declared integrated.
 
-1. **Foundation:** Android shell, safe installer import, tests, and CI.
-2. **Capsule workspaces:** create/list/remove private file-based workspaces, persist metadata, and prepare C:/D: directory layouts; this does not provide process or VM isolation.
-3. **Runtime architecture:** keep the engine catalog, capability parser, and readiness planner in the JVM module; validate PE/COFF architecture before storing installers.
-4. **Linux userland and Windows compatibility:** build a reproducible ARM64 userland and Wine integration; then select a compatible x86-64 execution route. The planner currently reports missing prerequisites and does not launch anything.
-5. **Graphics and input:** use the Vulkan extension/feature probe to assess DXVK and VKD3D prerequisites, then validate on specific physical GPUs.
-6. **Execution milestone:** launch a small, explicitly supported Windows test application on physical ARM64 hardware.
-7. **Hardening:** security review, resource limits, diagnostics, and reproducible builds.
+## Contribution and license
 
-Every runtime feature must have documented device coverage and test evidence before being marked complete.
-
-## Contributing
-
-Please open an issue before proposing a runtime engine or binary dependency. Every integration must document its upstream source, license, supported ABI, build procedure, and test evidence.
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+VYROX is licensed under [Apache-2.0](LICENSE). Before proposing or adding a runtime binary, document its upstream source, exact version, license, ABI, build method, and physical-device test results.
