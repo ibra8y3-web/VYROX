@@ -135,6 +135,12 @@ class InstallerStorage(context: Context) {
         if (inspection.format != expectedFormat) {
             throw IOException("The imported Windows installer failed its format validation.")
         }
+        if (
+            expectedFormat == WindowsBinaryFormat.PORTABLE_EXECUTABLE &&
+            inspection.architecture !in setOf(WindowsArchitecture.X86, WindowsArchitecture.X86_64)
+        ) {
+            throw IOException("This x86-64 Wine runtime supports x86 and x86-64 Windows EXE files, not ARM executables.")
+        }
         return FileInputStream(file)
     }
 
