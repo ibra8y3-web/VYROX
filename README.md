@@ -103,6 +103,7 @@ app/src/test/java/com/vyrox/runtime/core/host/
   HostCapabilitiesTest.kt
 app/src/test/java/com/vyrox/runtime/core/engine/
   RuntimePackageManagerTest.kt
+  ProotExecutableLocatorTest.kt
 runtime-engine/
   src/main/kotlin/com/vyrox/engine/RuntimeCatalog.kt
   src/test/kotlin/com/vyrox/engine/RuntimeCatalogTest.kt

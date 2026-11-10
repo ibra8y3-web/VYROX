@@ -13,10 +13,10 @@ class ProotExecutableLocatorTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun locatesArm64ExecutableInNativeLibraryDirectory() {
+    fun locatesArm64PieExecutableInNativeLibraryDirectory() {
         val nativeDirectory = temporaryFolder.newFolder("native-lib")
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
-        writeElf(executable, machine = 183)
+        writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
         executable.setExecutable(true)
 
         val found = ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a"))
@@ -28,22 +28,25 @@ class ProotExecutableLocatorTest {
     fun refusesUnsupportedHostAbi() {
         val nativeDirectory = temporaryFolder.newFolder("x86-native")
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
-        writeElf(executable, machine = 183)
+        writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
         executable.setExecutable(true)
 
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("x86_64")))
     }
 
     @Test
-    fun rejectsWrongMachineAndElf32Payloads() {
+    fun rejectsWrongMachineElf32AndSharedLibraryImages() {
         val nativeDirectory = temporaryFolder.newFolder("invalid-native")
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
-        writeElf(executable, machine = 62)
+
+        writeElf(executable, machine = 62, elfType = 3, entryPoint = 0x1000)
         executable.setExecutable(true)
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
 
-        writeElf(executable, machine = 183, elfClass = 1)
-        executable.setExecutable(true)
+        writeElf(executable, machine = 183, elfClass = 1, elfType = 3, entryPoint = 0x1000)
+        assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
+
+        writeElf(executable, machine = 183, elfType = 3, entryPoint = 0L)
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
     }
 
@@ -51,12 +54,12 @@ class ProotExecutableLocatorTest {
     fun rejectsNonExecutableAndSymbolicLinkPayloads() {
         val nativeDirectory = temporaryFolder.newFolder("native-links")
         val executable = File(nativeDirectory, ProotExecutableLocator.FILE_NAME)
-        writeElf(executable, machine = 183)
+        writeElf(executable, machine = 183, elfType = 3, entryPoint = 0x1000)
         executable.setExecutable(false)
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
 
         val outside = temporaryFolder.newFile("outside-proot")
-        writeElf(outside, machine = 183)
+        writeElf(outside, machine = 183, elfType = 3, entryPoint = 0x1000)
         outside.setExecutable(true)
         executable.delete()
         Files.createSymbolicLink(executable.toPath(), outside.toPath())
@@ -69,7 +72,13 @@ class ProotExecutableLocatorTest {
         assertNull(ProotExecutableLocator.locate(nativeDirectory, listOf("arm64-v8a")))
     }
 
-    private fun writeElf(file: File, machine: Int, elfClass: Int = 2) {
+    private fun writeElf(
+        file: File,
+        machine: Int,
+        elfClass: Int = 2,
+        elfType: Int,
+        entryPoint: Long
+    ) {
         file.parentFile?.mkdirs()
         val header = ByteArray(64)
         header[0] = 0x7F.toByte()
@@ -79,8 +88,13 @@ class ProotExecutableLocatorTest {
         header[4] = elfClass.toByte()
         header[5] = 1
         header[6] = 1
+        header[16] = (elfType and 0xFF).toByte()
+        header[17] = ((elfType ushr 8) and 0xFF).toByte()
         header[18] = (machine and 0xFF).toByte()
         header[19] = ((machine ushr 8) and 0xFF).toByte()
+        repeat(8) { index ->
+            header[24 + index] = ((entryPoint ushr (index * 8)) and 0xFF).toByte()
+        }
         file.writeBytes(header)
     }
 }
