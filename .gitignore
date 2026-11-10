@@ -10,3 +10,7 @@ captures/
 .cxx/
 *.apk
 *.aab
+
+# PRoot native payloads are generated and checksum-verified by CI.
+app/src/main/jniLibs/arm64-v8a/*.so
+app/src/main/assets/third_party-licenses/

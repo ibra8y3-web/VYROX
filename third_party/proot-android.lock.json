@@ -17,7 +17,10 @@
     "proot_unbundle_loader": false,
     "reason": "VYROX must not compile an absolute /data/data/com.termux/files/usr/libexec/proot loader path. Keep the loader embedded until a VYROX-specific relocation strategy is verified.",
     "required_ndk": "Android NDK with AArch64 Android/Bionic target",
-    "note": "Termux package build recipes are a reference. They do not by themselves produce a VYROX-compatible binary or resolve VYROX's separate package prefix."
+    "note": "Termux package build recipes are a reference. They do not by themselves produce a VYROX-compatible binary or resolve VYROX's separate package prefix.",
+    "build_script": "scripts/build_proot_android.sh",
+    "loader_strategy": "Build the PRoot loader as a separate static AArch64 ELF packaged as libproot-loader.so. At runtime set PROOT_LOADER to the loader beside libproot.so under applicationInfo.nativeLibraryDir.",
+    "native_output_directory": "app/src/main/jniLibs/arm64-v8a"
   },
   "components": [
     {
@@ -28,7 +31,7 @@
       "source_commit": "52d65a4dc140ca554d241a1438ddd4f6b00c9813",
       "source_sha256": "30d12a6e2cc4147123756ff58edea262d3083bbc238c12d0ab9b39e3d1c40852",
       "license": "GPL-2.0",
-      "role": "Android/Bionic PRoot process and filesystem redirection",
+      "role": "Android/Bionic PRoot process and filesystem redirection; runtime loader is a separate static executable",
       "required_by": "VYROX Linux RootFS runtime",
       "state": "pinned_source_not_built_for_vyrox"
     },
@@ -64,6 +67,8 @@
     "license_notices_reviewed": false,
     "runtime_package_sha256_published": false,
     "physical_android_ptrace_test_passed": false,
-    "linux_rootfs_shell_execution_passed": false
+    "linux_rootfs_shell_execution_passed": false,
+    "loader_built": false,
+    "loader_packaged": false
   }
 }
