@@ -94,6 +94,9 @@ class RuntimeProcessSupervisor(
         }
         plan.environment.forEach { (key, value) ->
             require(ENVIRONMENT_KEY.matches(key)) { "Invalid runtime environment variable name." }
+            require(!key.startsWith("LD_")) {
+                "Dynamic-linker variables are controlled by the host runtime, not guest input."
+            }
             validateProcessArgument(value)
         }
 
@@ -103,6 +106,10 @@ class RuntimeProcessSupervisor(
         }
         require(isInsideApprovedRoot(executable)) {
             "The runtime executable is outside the app-approved directories."
+        }
+        val hostLibraryDirectory = plan.nativeLibraryRoot.canonicalFile
+        require(hostLibraryDirectory.isDirectory && isInsideApprovedRoot(hostLibraryDirectory)) {
+            "The host native-library directory is outside the app-approved directories."
         }
         val workingDirectory = plan.processWorkingDirectory.canonicalFile
         if (!workingDirectory.isDirectory) {
@@ -138,6 +145,10 @@ class RuntimeProcessSupervisor(
                 .redirectErrorStream(true)
                 .apply {
                     environment().clear()
+                    // PRoot is a Bionic host executable. Its native dependencies
+                    // are packaged beside it in nativeLibraryDir. Do not allow
+                    // guest-provided LD_* values to override this trusted path.
+                    environment()["LD_LIBRARY_PATH"] = hostLibraryDirectory.absolutePath
                     environment().putAll(plan.environment)
                 }
                 .start()
