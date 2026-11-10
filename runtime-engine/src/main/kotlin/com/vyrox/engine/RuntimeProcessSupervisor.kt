@@ -21,6 +21,7 @@ class ManagedRuntimeProcess internal constructor(
     private val logThread: Thread,
     private val truncated: AtomicBoolean,
     val logFile: File,
+    private val temporaryDirectory: File,
     private val startedAtMillis: Long
 ) {
     fun await(timeoutMillis: Long): RuntimeProcessResult {
@@ -32,6 +33,7 @@ class ManagedRuntimeProcess internal constructor(
         logThread.join(LOG_THREAD_JOIN_MILLIS)
 
         val exitCode = if (process.isAlive) null else process.exitValue()
+        if (exitCode != null) temporaryDirectory.deleteRecursively()
         return RuntimeProcessResult(
             exitCode = exitCode,
             timedOut = !completed,
@@ -47,6 +49,7 @@ class ManagedRuntimeProcess internal constructor(
     fun terminate() {
         terminateProcess()
         logThread.join(LOG_THREAD_JOIN_MILLIS)
+        if (!process.isAlive) temporaryDirectory.deleteRecursively()
     }
 
     private fun terminateProcess() {
@@ -95,8 +98,8 @@ class RuntimeProcessSupervisor(
         }
         plan.environment.forEach { (key, value) ->
             require(ENVIRONMENT_KEY.matches(key)) { "Invalid runtime environment variable name." }
-            require(!key.startsWith("LD_") && key != "PROOT_LOADER") {
-                "Dynamic-linker and PRoot loader variables are controlled by the host runtime, not guest input."
+            require(!key.startsWith("LD_") && key != "PROOT_LOADER" && key != "TMPDIR") {
+                "Dynamic-linker, PRoot loader, and host temporary-directory variables are controlled by the host runtime, not guest input."
             }
             validateProcessArgument(value)
         }
@@ -143,6 +146,14 @@ class RuntimeProcessSupervisor(
         if (logFile.parentFile != canonicalLogDirectory || logFile.exists()) {
             throw IOException("The runtime log path is invalid or already exists.")
         }
+        val temporaryDirectory = File(canonicalLogDirectory, ".tmp-$runId").canonicalFile
+        if (
+            temporaryDirectory.parentFile != canonicalLogDirectory ||
+            temporaryDirectory.exists() ||
+            Files.isSymbolicLink(temporaryDirectory.toPath())
+        ) {
+            throw IOException("The runtime temporary-directory path is invalid or already exists.")
+        }
 
         val command = ArrayList<String>(plan.arguments.size + 1)
         command += executable.absolutePath
@@ -150,6 +161,10 @@ class RuntimeProcessSupervisor(
 
         if (!logFile.createNewFile()) {
             throw IOException("Could not create the runtime log file.")
+        }
+        if (!temporaryDirectory.mkdir()) {
+            logFile.delete()
+            throw IOException("Could not create the private runtime temporary directory.")
         }
 
         try {
@@ -161,6 +176,7 @@ class RuntimeProcessSupervisor(
                     // Static talloc and libandroid-shmem are linked into PRoot.
                     // Only the external guest loader path is host-controlled.
                     environment().putAll(plan.environment)
+                    environment()["TMPDIR"] = temporaryDirectory.absolutePath
                     environment()["PROOT_LOADER"] = guestLoader.absolutePath
                 }
                 .start()
@@ -179,9 +195,11 @@ class RuntimeProcessSupervisor(
                 logThread = collector,
                 truncated = truncated,
                 logFile = logFile,
+                temporaryDirectory = temporaryDirectory,
                 startedAtMillis = System.currentTimeMillis()
             )
         } catch (exception: Exception) {
+            temporaryDirectory.deleteRecursively()
             logFile.delete()
             if (exception is IOException) throw exception
             throw IOException("Could not start the runtime process.", exception)

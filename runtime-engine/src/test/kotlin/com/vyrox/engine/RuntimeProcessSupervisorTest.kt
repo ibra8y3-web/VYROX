@@ -111,6 +111,43 @@ class RuntimeProcessSupervisorTest {
     }
 
     @Test
+    fun providesPrivateTemporaryDirectoryAndRemovesItAfterExit() {
+        val working = temporaryFolder.newFolder("private-temp-work")
+        val logs = temporaryFolder.newFolder("private-temp-logs")
+        val expectedTempDirectory = File(logs, ".tmp-private-temp-run")
+        val process = RuntimeProcessSupervisor(
+            logs,
+            listOf(temporaryFolder.root, File("/usr"))
+        ).start(
+            shellPlan(working, listOf("-c", "printf '%s' \"\$TMPDIR\"")),
+            "private-temp-run"
+        )
+
+        val result = process.await(5_000)
+
+        assertEquals(0, result.exitCode)
+        assertEquals(expectedTempDirectory.canonicalPath, result.logFile.readText())
+        assertFalse(expectedTempDirectory.exists())
+    }
+
+    @Test
+    fun rejectsGuestAttemptsToOverrideHostTemporaryDirectory() {
+        val working = temporaryFolder.newFolder("guest-temp-work")
+        val logs = temporaryFolder.newFolder("guest-temp-logs")
+        val plan = shellPlan(
+            working,
+            listOf("-c", "true"),
+            environment = mapOf("TMPDIR" to "/tmp/untrusted")
+        )
+        val supervisor = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/usr")))
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            supervisor.start(plan, "guest-temp")
+        }
+        assertFalse(File(logs, "guest-temp.log").exists())
+    }
+
+    @Test
     fun refusesExecutableOutsideApprovedRoots() {
         val working = temporaryFolder.newFolder("approved-work")
         val logs = File(working, "logs").apply { mkdirs() }

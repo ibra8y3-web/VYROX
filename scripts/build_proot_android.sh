@@ -21,10 +21,17 @@ if [[ -z "$SDK_ROOT" ]]; then
   exit 2
 fi
 
+# Always use the version pinned by this repository. GitHub-hosted runners
+# may export ANDROID_NDK_HOME for a different preinstalled NDK release.
 NDK_ROOT="$SDK_ROOT/ndk/$NDK_VERSION"
 NDK_OVERRIDE="$(printenv ANDROID_NDK_HOME || true)"
-if [[ -n "$NDK_OVERRIDE" ]]; then
-  NDK_ROOT="$NDK_OVERRIDE"
+if [[ -n "$NDK_OVERRIDE" && -f "$NDK_OVERRIDE/source.properties" ]]; then
+  NDK_OVERRIDE_VERSION="$(sed -n 's/^Pkg.Revision=//p' "$NDK_OVERRIDE/source.properties" | head -n 1)"
+  if [[ "$NDK_OVERRIDE_VERSION" == "$NDK_VERSION" ]]; then
+    NDK_ROOT="$NDK_OVERRIDE"
+  else
+    echo "Ignoring auto-selected Android NDK $NDK_OVERRIDE_VERSION; using pinned $NDK_VERSION."
+  fi
 fi
 TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
 if [[ ! -x "$TOOLCHAIN/bin/aarch64-linux-android$API_LEVEL-clang" ]]; then
@@ -97,6 +104,11 @@ for source_dir in "$PROOT_SRC" "$TALLOC_SRC" "$SHMEM_SRC"; do
   }
 done
 
+# libandroid-shmem assumes glibc's _PATH_TMP exists. Android/Bionic does not
+# provide it; VYROX patches the upstream source to use a private TMPDIR from
+# RuntimeProcessSupervisor instead of a shared global temporary directory.
+python3 "$ROOT/scripts/patch_android_shmem.py" "$SHMEM_SRC/shmem.c"
+
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 
 echo "Building static libtalloc $TALLOC_VERSION for arm64-v8a"
@@ -168,7 +180,7 @@ echo "Building static libandroid-shmem $SHMEM_VERSION for arm64-v8a"
   cd "$SHMEM_SRC"
   export CC AR
   export CFLAGS="-O2 -fPIC"
-  make -j"$JOBS" libandroid-shmem.a
+  make -j"$JOBS" CFLAGS="-O2 -fPIC -std=c11 -Wall -Wextra" libandroid-shmem.a
   install -m 0644 libandroid-shmem.a "$PREFIX/lib/libandroid-shmem.a"
   install -m 0644 shm.h "$PREFIX/include/shm.h"
 )
