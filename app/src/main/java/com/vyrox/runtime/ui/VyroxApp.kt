@@ -96,6 +96,8 @@ private val VyroxArabicText = mapOf(
     "VYROX Windows Desktop" to "سطح مكتب Windows في VYROX",
     "Close desktop" to "إغلاق سطح المكتب",
     "Tap here to type" to "اضغط هنا للكتابة",
+    "Install DXVK + VKD3D-Proton" to "تثبيت DXVK وVKD3D-Proton",
+    "DXVK + VKD3D installed" to "تم تثبيت DXVK وVKD3D",
     "Select a Capsule first" to "اختر بيئة أولًا",
     "Import EXE / MSI / ZIP" to "استيراد EXE أو MSI أو ZIP",
     "Import Capsule backup" to "استيراد نسخة احتياطية لبيئة",
@@ -196,6 +198,7 @@ fun VyroxApp(
     prootBinaryAvailable: Boolean,
     box64Installed: Boolean,
     wineInstalled: Boolean,
+    graphicsTranslationInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     installedWindowsPrograms: List<InstalledWindowsProgram>,
     windowsDesktopVisible: Boolean,
@@ -233,6 +236,7 @@ fun VyroxApp(
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     onInstallWine: (LinuxRootFsInfo) -> Unit,
     onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
+    onInstallGraphicsTranslation: (LinuxRootFsInfo) -> Unit,
     onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
     onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     onCloseWindowsDesktop: () -> Unit,
@@ -294,6 +298,7 @@ fun VyroxApp(
                     prootBinaryAvailable = prootBinaryAvailable,
                     box64Installed = box64Installed,
                     wineInstalled = wineInstalled,
+                    graphicsTranslationInstalled = graphicsTranslationInstalled,
                     winePrefixInfo = winePrefixInfo,
                     installedWindowsPrograms = installedWindowsPrograms,
                     onRunWindowsEntry = onRunWindowsEntry,
@@ -343,6 +348,7 @@ fun VyroxApp(
                     onCheckWinePackages = onCheckWinePackages,
                     onInstallWine = onInstallWine,
                     onCreateWinePrefix = onCreateWinePrefix,
+                    onInstallGraphicsTranslation = onInstallGraphicsTranslation,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -481,8 +487,10 @@ fun VyroxApp(
                         onCheckWinePackages = onCheckWinePackages,
                         onInstallWine = onInstallWine,
                         onCreateWinePrefix = onCreateWinePrefix,
+                        onInstallGraphicsTranslation = onInstallGraphicsTranslation,
                         box64Installed = box64Installed,
                         wineInstalled = wineInstalled,
+                        graphicsTranslationInstalled = graphicsTranslationInstalled,
                         winePrefixInfo = winePrefixInfo,
                         installedWindowsPrograms = installedWindowsPrograms,
                         onRunWindowsEntry = onRunWindowsEntry,
@@ -962,6 +970,8 @@ internal fun CapsuleExplorerCard(
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     onInstallWine: (LinuxRootFsInfo) -> Unit,
     onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
+    onInstallGraphicsTranslation: (LinuxRootFsInfo) -> Unit,
+    graphicsTranslationInstalled: Boolean,
     box64Installed: Boolean,
     wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
@@ -1144,6 +1154,25 @@ internal fun CapsuleExplorerCard(
                                             enabled = !isImporting && box64Installed && wineInstalled && winePrefixInfo == null
                                         ) {
                                             Text(vxText("Create Windows prefix"))
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onInstallGraphicsTranslation(rootFs) },
+                                            enabled = !isImporting && box64Installed && wineInstalled &&
+                                                winePrefixInfo != null && !graphicsTranslationInstalled
+                                        ) {
+                                            Text(
+                                                if (graphicsTranslationInstalled) {
+                                                    vxText("DXVK + VKD3D installed")
+                                                } else {
+                                                    vxText("Install DXVK + VKD3D-Proton")
+                                                }
+                                            )
                                         }
                                     }
                                     Row(
