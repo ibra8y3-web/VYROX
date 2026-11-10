@@ -1,6 +1,7 @@
 package com.vyrox.runtime
 
 import android.net.Uri
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +18,8 @@ import androidx.lifecycle.lifecycleScope
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleStorage
+import com.vyrox.runtime.core.capsule.WindowsProgramManager
+import com.vyrox.runtime.core.capsule.InstalledWindowsProgram
 import com.vyrox.runtime.core.capsule.CapsuleSnapshotInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
@@ -31,6 +34,7 @@ import com.vyrox.engine.WinePrefixInfo
 import com.vyrox.engine.WinePrefixManager
 import com.vyrox.engine.WinePackagePreflight
 import com.vyrox.engine.WineRuntimePlan
+import com.vyrox.engine.WindowsInstallerKind
 import com.vyrox.engine.WinePrefixCreationTicket
 import com.vyrox.engine.ProotCommandPlanner
 import com.vyrox.engine.ProotBindMount
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private var appLanguage by mutableStateOf("en")
     private lateinit var installerStorage: InstallerStorage
     private lateinit var capsuleStorage: CapsuleStorage
+    private lateinit var windowsProgramManager: WindowsProgramManager
     private lateinit var hostCapabilities: HostCapabilities
     private lateinit var rootFsManager: LinuxRootFsManager
     private var prootBinaryAvailable by mutableStateOf(false)
@@ -66,6 +71,12 @@ class MainActivity : ComponentActivity() {
     private val capsuleEntries = mutableStateListOf<CapsuleFileEntry>()
     private val capsuleSearchResults = mutableStateListOf<CapsuleFileEntry>()
     private val rootFsImages = mutableStateListOf<LinuxRootFsInfo>()
+    private val windowsPrograms = mutableStateListOf<InstalledWindowsProgram>()
+    private var windowsDesktopVisible by mutableStateOf(false)
+    private var windowsDesktopFrame by mutableStateOf<Bitmap?>(null)
+    private var windowsDesktopStatus by mutableStateOf("Starting Windows desktop...")
+    private var activeVncClient: VncRfbClient? = null
+    private var activeAudioBridge: PcmAudioBridge? = null
 
     private var selectedCapsule by mutableStateOf<CapsuleInfo?>(null)
     private var snapshotManagerCapsule by mutableStateOf<CapsuleInfo?>(null)
@@ -132,6 +143,7 @@ class MainActivity : ComponentActivity() {
 
         installerStorage = InstallerStorage(applicationContext)
         capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
+        windowsProgramManager = WindowsProgramManager(capsuleStorage)
         rootFsManager = LinuxRootFsManager(File(filesDir, "capsules"))
         hostCapabilities = HostCapabilitiesProbe.read(applicationContext)
         prootBinaryAvailable = ProotExecutableLocator.locate(
@@ -158,6 +170,10 @@ class MainActivity : ComponentActivity() {
                 box64Installed = box64Installed,
                 wineInstalled = wineInstalled,
                 winePrefixInfo = winePrefixInfo,
+                installedWindowsPrograms = windowsPrograms.toList(),
+                windowsDesktopVisible = windowsDesktopVisible,
+                windowsDesktopFrame = windowsDesktopFrame,
+                windowsDesktopStatus = windowsDesktopStatus,
                 isImporting = isImporting,
                 activeRuntimeLabel = activeRuntimeLabel,
                 isStoppingRuntimeProcess = isStoppingRuntimeProcess,
@@ -203,6 +219,12 @@ class MainActivity : ComponentActivity() {
                 onCheckWinePackages = ::checkWinePackages,
                 onInstallWine = ::installWine,
                 onCreateWinePrefix = ::createWinePrefix,
+                onRunWindowsEntry = ::runWindowsEntry,
+                onLaunchWindowsProgram = ::launchWindowsProgram,
+                onCloseWindowsDesktop = ::closeWindowsDesktop,
+                onVncPointer = ::sendWindowsPointer,
+                onVncKeySym = ::sendWindowsKeySym,
+                onVncText = ::sendWindowsText,
                 onExtractZipEntry = ::extractZipEntry,
                 onCloneCapsule = ::cloneCapsule,
                 onRenameCapsule = ::renameCapsule,
@@ -215,6 +237,14 @@ class MainActivity : ComponentActivity() {
                 onImportCapsuleBackup = ::requestImportCapsuleBackup
             )
         }
+    }
+
+    override fun onDestroy() {
+        activeVncClient?.close()
+        activeAudioBridge?.close()
+        activeVncClient = null
+        activeAudioBridge = null
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -477,7 +507,9 @@ class MainActivity : ComponentActivity() {
 
     private fun openCapsule(capsule: CapsuleInfo) {
         box64Installed = false
+        wineInstalled = false
         winePrefixInfo = null
+        windowsPrograms.clear()
         selectedCapsule = capsule
         selectedDrive = 'C'
         selectedPath = ""
@@ -486,11 +518,14 @@ class MainActivity : ComponentActivity() {
         rootFsImages.clear()
         refreshCapsuleDirectory()
         refreshRootFsImages()
+        refreshWindowsPrograms(capsule.id)
     }
 
     private fun closeCapsuleExplorer() {
         box64Installed = false
+        wineInstalled = false
         winePrefixInfo = null
+        windowsPrograms.clear()
         selectedCapsule = null
         selectedPath = ""
         capsuleEntries.clear()
@@ -1018,8 +1053,9 @@ class MainActivity : ComponentActivity() {
                 finalized = true
                 winePrefixInfo = prefix
                 statusMessage =
-                    "A real Wine " + prefix.wineVersion + " WoW64 prefix is verified. C: and D: point to this Capsule's existing file-manager folders. Graphical Windows windows are not connected yet.\n" +
+                    "A real Wine " + prefix.wineVersion + " WoW64 prefix is verified. C: and D: point to this Capsule's existing file-manager folders.\n" +
                         output
+                refreshWindowsPrograms(capsule.id)
             } catch (exception: Exception) {
                 statusMessage = "Wine prefix creation failed: " +
                     (exception.message ?: exception.javaClass.simpleName)
@@ -1084,6 +1120,222 @@ class MainActivity : ComponentActivity() {
             resolver.delete()
             throw exception
         }
+    }
+
+    private fun refreshWindowsPrograms(capsuleId: String) {
+        lifecycleScope.launch {
+            val discovered = withContext(Dispatchers.IO) {
+                windowsProgramManager.discover(capsuleId)
+            }
+            if (selectedCapsule?.id == capsuleId) {
+                windowsPrograms.clear()
+                windowsPrograms.addAll(discovered)
+            }
+        }
+    }
+
+    private fun runWindowsEntry(entry: CapsuleFileEntry) {
+        if (entry.isDirectory) return
+        val extension = entry.name.substringAfterLast('.', "").lowercase()
+        val kind = when (extension) {
+            "exe" -> WindowsInstallerKind.EXE
+            "msi" -> WindowsInstallerKind.MSI
+            else -> {
+                statusMessage = "Choose a verified EXE or MSI file inside the Capsule."
+                return
+            }
+        }
+        val capsule = selectedCapsule ?: return
+        val prefix = winePrefixInfo ?: run {
+            statusMessage = "Create and verify this Capsule's Wine prefix before installing or running Windows programs."
+            return
+        }
+        val guestDrive = if (selectedDrive == 'C') prefix.guestDriveCPath else prefix.guestDriveDPath
+        runWindowsTarget(
+            capsule = capsule,
+            guestTargetPath = guestDrive + "/" + entry.relativePath,
+            kind = kind,
+            displayName = entry.name
+        )
+    }
+
+    private fun launchWindowsProgram(program: InstalledWindowsProgram) {
+        val capsule = selectedCapsule ?: return
+        val prefix = winePrefixInfo ?: run {
+            statusMessage = "Create and verify this Capsule's Wine prefix first."
+            return
+        }
+        runWindowsTarget(
+            capsule = capsule,
+            guestTargetPath = prefix.guestDriveCPath + "/" + program.relativePath,
+            kind = WindowsInstallerKind.EXE,
+            displayName = program.name
+        )
+    }
+
+    private fun runWindowsTarget(
+        capsule: CapsuleInfo,
+        guestTargetPath: String,
+        kind: WindowsInstallerKind,
+        displayName: String
+    ) {
+        if (isImporting || windowsDesktopVisible) return
+        val prefix = winePrefixInfo ?: run {
+            statusMessage = "This Capsule has no verified Wine prefix."
+            return
+        }
+        if (!box64Installed || !wineInstalled) {
+            statusMessage = "Build Box64 and install WineHQ stable before running Windows software."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            windowsDesktopVisible = true
+            windowsDesktopFrame = null
+            windowsDesktopStatus = "Starting the isolated Windows desktop..."
+            statusMessage = "Starting " + displayName + " inside Capsule " + capsule.name + "..."
+            var prepared: PreparedRootFsShell? = null
+            val audioBridge = PcmAudioBridge()
+            val vncClient = VncRfbClient()
+            activeAudioBridge = audioBridge
+            activeVncClient = vncClient
+            try {
+                val rootFs = withContext(Dispatchers.IO) {
+                    rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        LinuxRootFsArchitecture.ARM64
+                    ) ?: throw IOException("The selected ARM64 Linux RootFS is no longer installed.")
+                }
+                val hostDriveC = withContext(Dispatchers.IO) {
+                    capsuleStorage.getDriveRoot(capsule.id, 'C')
+                        ?: throw IOException("The Capsule C: drive is missing.")
+                }
+                val hostDriveD = withContext(Dispatchers.IO) {
+                    capsuleStorage.getDriveRoot(capsule.id, 'D')
+                        ?: throw IOException("The Capsule D: drive is missing.")
+                }
+                val script = withContext(Dispatchers.IO) {
+                    WineRuntimePlan.createInteractiveRunScript(
+                        guestPrefixPath = "/opt/vyrox/prefixes/" + capsule.id,
+                        guestTargetPath = guestTargetPath,
+                        kind = kind,
+                        rootFsDirectory = rootFs
+                    )
+                }
+                val shell = withContext(Dispatchers.IO) {
+                    createRootFsShellPlan(
+                        rootFsDirectory = rootFs,
+                        shellScript = script,
+                        extraMounts = listOf(
+                            ProotBindMount(hostDriveC, prefix.guestDriveCPath),
+                            ProotBindMount(hostDriveD, prefix.guestDriveDPath)
+                        ),
+                        fakeRoot = true
+                    )
+                }
+                prepared = shell
+                runCatching { audioBridge.start() }
+                    .onFailure {
+                        windowsDesktopStatus = "Windows desktop starting. Android audio bridge is unavailable."
+                    }
+
+                val execution = runManagedRuntimeProcess(
+                    plan = shell.plan,
+                    runId = "windows-" + System.currentTimeMillis(),
+                    maxLogBytes = 4L * 1024L * 1024L,
+                    timeoutMillis = 4L * 60L * 60L * 1000L,
+                    label = "Windows: " + displayName,
+                    onStarted = {
+                        vncClient.connectAsync(
+                            onFrame = { frame ->
+                                runOnUiThread {
+                                    if (windowsDesktopVisible) windowsDesktopFrame = frame
+                                }
+                            },
+                            onStatus = { message ->
+                                runOnUiThread { windowsDesktopStatus = message }
+                            },
+                            onError = { message ->
+                                runOnUiThread {
+                                    windowsDesktopStatus = message
+                                    statusMessage = message
+                                }
+                            }
+                        )
+                    }
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
+                        .getOrDefault("Windows process log could not be read.")
+                        .takeLast(16_000)
+                }
+                statusMessage = when {
+                    execution.stoppedByUser -> "Windows session stopped by the user.\n" + output
+                    execution.result.timedOut -> "Windows session reached its time limit.\n" + output
+                    execution.result.exitCode == 0 -> displayName + " closed. Refreshing installed applications...\n" + output
+                    else -> displayName + " failed with exit code " +
+                        (execution.result.exitCode?.toString() ?: "unknown") + ".\n" + output
+                }
+
+                // Extract embedded Windows icons and then scan the Capsule C: drive.
+                val iconShell = withContext(Dispatchers.IO) {
+                    createRootFsShellPlan(
+                        rootFsDirectory = rootFs,
+                        shellScript = WineRuntimePlan.createIconExtractionScript(capsule.id),
+                        extraMounts = listOf(
+                            ProotBindMount(hostDriveC, prefix.guestDriveCPath),
+                            ProotBindMount(hostDriveD, prefix.guestDriveDPath)
+                        ),
+                        fakeRoot = true
+                    )
+                }
+                try {
+                    runManagedRuntimeProcess(
+                        plan = iconShell.plan,
+                        runId = "windows-icons-" + System.currentTimeMillis(),
+                        maxLogBytes = 1024L * 1024L,
+                        timeoutMillis = 3L * 60L * 1000L,
+                        label = "Discover Windows applications and icons"
+                    )
+                } finally {
+                    withContext(Dispatchers.IO) { iconShell.resolverFile.delete() }
+                }
+                refreshWindowsPrograms(capsule.id)
+            } catch (exception: Exception) {
+                statusMessage = "Windows execution failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+                windowsDesktopStatus = statusMessage.orEmpty()
+            } finally {
+                vncClient.close()
+                audioBridge.close()
+                activeVncClient = null
+                activeAudioBridge = null
+                windowsDesktopVisible = false
+                windowsDesktopFrame = null
+                withContext(Dispatchers.IO) { prepared?.resolverFile?.delete() }
+                isImporting = false
+                refreshCapsuleDirectory()
+                refreshWindowsPrograms(capsule.id)
+            }
+        }
+    }
+
+    private fun closeWindowsDesktop() {
+        windowsDesktopStatus = "Closing Windows desktop..."
+        stopRuntimeProcess()
+    }
+
+    private fun sendWindowsPointer(buttonMask: Int, x: Int, y: Int) {
+        activeVncClient?.sendPointer(buttonMask, x, y)
+    }
+
+    private fun sendWindowsKeySym(keySym: Int, down: Boolean) {
+        activeVncClient?.sendKeySym(keySym, down)
+    }
+
+    private fun sendWindowsText(value: String) {
+        activeVncClient?.sendText(value)
     }
 
     private fun buildBox64(rootFs: LinuxRootFsInfo) {
@@ -1200,7 +1452,8 @@ class MainActivity : ComponentActivity() {
         runId: String,
         maxLogBytes: Long,
         timeoutMillis: Long,
-        label: String
+        label: String,
+        onStarted: (() -> Unit)? = null
     ): RuntimeProcessExecution {
         val nativeDirectory = File(applicationInfo.nativeLibraryDir)
         val supervisor = RuntimeProcessSupervisor(
@@ -1220,6 +1473,7 @@ class MainActivity : ComponentActivity() {
             activeRuntimeLabel = label
             isStoppingRuntimeProcess = false
             runtimeStopRequested = false
+            onStarted?.invoke()
 
             val result = withContext(Dispatchers.IO) {
                 process.await(timeoutMillis)
