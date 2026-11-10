@@ -200,6 +200,14 @@ class RuntimeProcessSupervisorTest {
         assertFalse(File(logs, "invalid-argument.log").exists())
     }
 
+    @Test
+    fun supportsFourHourWindowsSessionTimeouts() {
+        assertTrue(
+            RuntimeProcessSupervisor.MAX_TIMEOUT_MILLIS >=
+                4L * 60L * 60L * 1000L
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsInvalidRunId() {
         val working = temporaryFolder.newFolder("bad-work")
