@@ -18,6 +18,10 @@ class Box64BuildPlanTest {
         assertTrue(script.contains("-DBAD_SIGNAL=ON"))
         assertTrue(script.contains("cmake --build"))
         assertTrue(script.contains("cmake --install"))
+        assertTrue(script.contains("x86_64-linux-gnu-as --64"))
+        assertTrue(script.contains("x86_64-linux-gnu-ld -static"))
+        assertTrue(script.contains("VYROX_BOX64_X86_64_SMOKE_OK"))
+        assertTrue(script.contains("x86_64_smoke_test=passed"))
         assertTrue(script.contains("git init --template=/dev/null"))
         assertTrue(script.contains("\$BOX64_BINARY"))
         assertFalse(script.contains("@D@"))
@@ -65,6 +69,25 @@ class Box64BuildPlanTest {
     }
 
     @Test
+    fun installedCheckRejectsMissingX8664SmokeTestRecord() {
+        val root = Files.createTempDirectory("vyrox-box64-no-smoke").toFile()
+        try {
+            val binary = File(root, Box64BuildPlan.BINARY_RELATIVE_PATH)
+            assertTrue(binary.parentFile.mkdirs())
+            binary.writeBytes(aarch64PieHeader())
+            assertTrue(binary.setExecutable(true, false))
+
+            val metadata = File(root, Box64BuildPlan.METADATA_RELATIVE_PATH)
+            assertTrue(metadata.parentFile.mkdirs())
+            metadata.writeText(validMetadata().replace("x86_64_smoke_test=passed\n", ""))
+
+            assertFalse(Box64BuildPlan.isInstalled(root))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun installedCheckRejectsSymbolicLinkInProtectedPath() {
         val root = Files.createTempDirectory("vyrox-box64-symlink").toFile()
         val external = Files.createTempDirectory("vyrox-box64-external").toFile()
@@ -92,7 +115,8 @@ class Box64BuildPlanTest {
     private fun validMetadata(): String =
         "version=${Box64BuildPlan.VERSION}\n" +
             "source_commit=${Box64BuildPlan.SOURCE_COMMIT}\n" +
-            "verification=version_and_aarch64_elf\n"
+            "verification=version_aarch64_elf_x86_64_smoke\n" +
+            "x86_64_smoke_test=passed\n"
 
     private fun aarch64PieHeader(): ByteArray {
         val bytes = ByteArray(128)

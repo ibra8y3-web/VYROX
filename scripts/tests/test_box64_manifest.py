@@ -26,6 +26,7 @@ VALID = {
         "recipe": "runtime-engine/src/main/kotlin/com/vyrox/engine/Box64BuildPlan.kt",
         "execution": "PRoot inside the selected Capsule ARM64 RootFS with fake-root guest identity",
         "parallel_jobs": 2,
+        "dependencies": ["binutils-x86-64-linux-gnu"],
         "cmake_options": [
             "-DCMAKE_BUILD_TYPE=Release",
             "-DCMAKE_C_COMPILER=gcc",
@@ -39,6 +40,8 @@ VALID = {
         "source_commit_checked": True,
         "reported_version_checked": True,
         "installed_elf_machine": "AArch64",
+        "x86_64_smoke_test_required": True,
+        "x86_64_smoke_test_passed_by_app_action": False,
         "build_on_physical_android_device": False,
         "box64_x86_64_linux_execution_tested": False,
         "windows_pe_execution_tested": False,
@@ -73,6 +76,19 @@ class Box64ManifestTests(unittest.TestCase):
         manifest = copy.deepcopy(VALID)
         manifest["verification"]["windows_pe_execution_tested"] = True
         self.assertTrue(any("Windows PE" in error for error in validate_manifest(manifest)))
+
+    def test_requires_x86_64_smoke_test_dependency_and_gate(self):
+        manifest = copy.deepcopy(VALID)
+        manifest["build"]["dependencies"] = []
+        manifest["verification"]["x86_64_smoke_test_required"] = False
+        errors = validate_manifest(manifest)
+        self.assertTrue(any("smoke test assembler" in error for error in errors))
+        self.assertTrue(any("smoke program" in error for error in errors))
+
+    def test_does_not_claim_user_phone_smoke_was_already_run(self):
+        manifest = copy.deepcopy(VALID)
+        manifest["verification"]["x86_64_smoke_test_passed_by_app_action"] = True
+        self.assertTrue(any("already ran" in error for error in validate_manifest(manifest)))
 
     def test_rejects_release_gate_claims_without_evidence(self):
         manifest = copy.deepcopy(VALID)

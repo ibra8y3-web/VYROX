@@ -33,7 +33,7 @@ Android device.
   following that license.
   Source: https://github.com/brunodev85/winlator
 
-## Graphics path is conditional
+## Wine 11.0 WoW64 and per-Capsule Prefixes\n\nWine 11.0 is the initial candidate because its January 13, 2026 release marks the new WoW64 architecture fully supported; the 64-bit prefix can run 32-bit Windows applications and uses one `wine` loader. This does not make Wine an Android binary or integrate it with VYROX. The selected ARM64 glibc RootFS still needs amd64 Wine packages and runtime libraries that can be loaded through Box64. Debian multiarch can add a foreign package architecture, but only if the RootFS repositories publish it and dependency versions remain consistent. VYROX will inspect sources/codename/candidates rather than silently mix package suites.\n\nEach Capsule will receive a separate prefix created by a real `wineboot -u` process under Box64; the app must verify registry files, drive mappings and Wine version before marking it ready. No placeholder registry files or fake prefix states will be created. The complete proposed layout and readiness gates are in [Windows Prefix architecture](WINDOWS_PREFIX_ARCHITECTURE.md).\n\n## Graphics path is conditional
 
 DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. The current DXVK 3.x
 driver guide requires Vulkan 1.4 and these device extensions:

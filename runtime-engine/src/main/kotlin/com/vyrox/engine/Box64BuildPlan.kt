@@ -46,7 +46,7 @@ object Box64BuildPlan {
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
         apt-get install -y --no-install-recommends \
-            build-essential cmake git pkg-config python3 \
+            build-essential cmake git pkg-config python3 binutils-x86-64-linux-gnu \
             libx11-dev libgl-dev libvulkan-dev libepoxy-dev \
             libasound2-dev libpulse-dev libpcap-dev
 
@@ -101,18 +101,64 @@ object Box64BuildPlan {
             exit 26
         }
 
+        # Build a tiny x86-64 Linux ELF using only syscalls. This avoids
+        # depending on an x86-64 glibc loader before that runtime is installed.
+        SMOKE_SOURCE='/tmp/vyrox-box64-smoke.S'
+        SMOKE_OBJECT='/tmp/vyrox-box64-smoke.o'
+        SMOKE_BINARY='/tmp/vyrox-box64-smoke'
+        cat > "$@D@SMOKE_SOURCE" <<'VYROX_ASM'
+        .global _start
+        .section .text
+        _start:
+            mov $1, %rax
+            mov $1, %rdi
+            lea message(%rip), %rsi
+            mov $message_length, %rdx
+            syscall
+            mov $60, %rax
+            xor %rdi, %rdi
+            syscall
+        .section .rodata
+        message:
+            .ascii "VYROX_BOX64_X86_64_SMOKE_OK\n"
+        message_length = . - message
+        VYROX_ASM
+
+        x86_64-linux-gnu-as --64 -o "$@D@SMOKE_OBJECT" "$@D@SMOKE_SOURCE"
+        x86_64-linux-gnu-ld -static -o "$@D@SMOKE_BINARY" "$@D@SMOKE_OBJECT"
+        readelf -h "$@D@SMOKE_BINARY" | grep -Eq 'Class:[[:space:]]+ELF64' || {
+            echo 'The Box64 smoke executable is not ELF64.' >&2
+            exit 27
+        }
+        readelf -h "$@D@SMOKE_BINARY" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64' || {
+            echo 'The Box64 smoke executable is not x86-64.' >&2
+            exit 28
+        }
+        "$@D@BOX64_BINARY" "$@D@SMOKE_BINARY" > /tmp/vyrox-box64-smoke.log 2>&1 || {
+            cat /tmp/vyrox-box64-smoke.log >&2
+            echo 'Box64 could not execute the x86-64 Linux syscall smoke program.' >&2
+            exit 29
+        }
+        cat /tmp/vyrox-box64-smoke.log
+        grep -F 'VYROX_BOX64_X86_64_SMOKE_OK' /tmp/vyrox-box64-smoke.log >/dev/null || {
+            echo 'Box64 output did not contain the x86-64 smoke marker.' >&2
+            exit 30
+        }
+        rm -f "$@D@SMOKE_SOURCE" "$@D@SMOKE_OBJECT" "$@D@SMOKE_BINARY" /tmp/vyrox-box64-smoke.log
+
         mkdir -p /usr/local/share/vyrox
-        printf 'version=%s\nsource_commit=%s\nsource_url=%s\nverification=version_and_aarch64_elf\ninstalled_at_epoch_seconds=%s\n' \
+        printf 'version=%s\nsource_commit=%s\nsource_url=%s\nverification=version_aarch64_elf_x86_64_smoke\nx86_64_smoke_test=passed\ninstalled_at_epoch_seconds=%s\n' \
             "@D@BOX64_VERSION" "@D@BOX64_COMMIT" "@D@BOX64_SOURCE_URL" "$(date +%s)" \
             > "@D@BOX64_METADATA"
 
-        echo "VYROX_BOX64_READY version=@D@BOX64_VERSION source_commit=@D@BOX64_COMMIT"
+        echo "VYROX_BOX64_READY version=@D@BOX64_VERSION source_commit=@D@BOX64_COMMIT x86_64_smoke_test=passed"
     """.trimIndent().replace("@D@", '$'.toString())
 
     /**
      * A package is visible as installed only when its metadata matches the
-     * pinned source and its executable is a regular AArch64 Linux ELF.
-     * This is not a test of x86-64 translation or Windows execution.
+     * pinned source, its executable is a regular AArch64 Linux ELF, and the
+     * build script's x86-64 syscall smoke test passed. This does not validate
+     * Wine or Windows PE execution.
      */
     fun isInstalled(rootFsDirectory: File): Boolean = runCatching {
         if (Files.isSymbolicLink(rootFsDirectory.toPath())) return false
@@ -144,7 +190,8 @@ object Box64BuildPlan {
         metadataFile.inputStream().buffered().use { metadata.load(it) }
         metadata.getProperty("version") == VERSION &&
             metadata.getProperty("source_commit") == SOURCE_COMMIT &&
-            metadata.getProperty("verification") == "version_and_aarch64_elf" &&
+            metadata.getProperty("verification") == "version_aarch64_elf_x86_64_smoke" &&
+            metadata.getProperty("x86_64_smoke_test") == "passed" &&
             Aarch64Elf.isPieExecutable(binary)
     }.getOrDefault(false)
 }

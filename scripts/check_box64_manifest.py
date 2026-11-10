@@ -75,6 +75,9 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
     options = build.get("cmake_options")
     if not isinstance(options, list) or not EXPECTED_OPTIONS.issubset(set(options)):
         errors.append("CMake options must include the reviewed ARM64, dynarec, BAD_SIGNAL, compiler and install settings")
+    dependencies = build.get("dependencies")
+    if not isinstance(dependencies, list) or "binutils-x86-64-linux-gnu" not in dependencies:
+        errors.append("the x86-64 Linux smoke test assembler and linker must be declared as a build dependency")
     if build.get("execution") != "PRoot inside the selected Capsule ARM64 RootFS with fake-root guest identity":
         errors.append("Box64 must be built inside the selected RootFS, not Android")
 
@@ -88,6 +91,10 @@ def validate_manifest(document: dict[str, Any]) -> list[str]:
         errors.append("binary version validation is required")
     if verification.get("installed_elf_machine") != "AArch64":
         errors.append("the installed ELF must be verified as AArch64")
+    if verification.get("x86_64_smoke_test_required") is not True:
+        errors.append("Box64 build must run the x86-64 syscall smoke program")
+    if verification.get("x86_64_smoke_test_passed_by_app_action") is not False:
+        errors.append("source manifest must not claim that a user-triggered phone smoke test already ran")
     if verification.get("build_on_physical_android_device") is not False:
         errors.append("source manifest cannot claim a physical-device build without evidence")
     if verification.get("box64_x86_64_linux_execution_tested") is not False:

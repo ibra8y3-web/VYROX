@@ -34,7 +34,7 @@ object RuntimeEngineCatalog {
             upstreamUrl = "https://gitlab.winehq.org/wine/wine",
             license = "LGPL-2.1-or-later",
             integrationState = EngineIntegrationState.RESEARCH_ONLY,
-            notes = "The intended x64-first path is x86-64 Wine WOW64 running through Box64 inside an ARM64 glibc RootFS. Wine and its x86-64 libraries are not installed or executed yet."
+            notes = "Initial candidate: Wine 11.0 WoW64 through Box64 inside an ARM64 glibc RootFS. Its x86-64 packages, libraries, per-Capsule wineboot prefix creation and device execution are not integrated. See docs/WINDOWS_PREFIX_ARCHITECTURE.md."
         ),
         RuntimeEngineDescriptor(
             id = "proot",

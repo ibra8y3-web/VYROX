@@ -817,7 +817,7 @@ class MainActivity : ComponentActivity() {
                     verified &&
                     output.contains("VYROX_BOX64_READY")
                 statusMessage = if (box64Installed) {
-                    "Box64 0.4.4 was built and its version plus AArch64 ELF metadata were verified inside this Capsule. x86-64 execution and Windows execution have not been verified.\n" + output
+                    "Box64 0.4.4 was built inside this Capsule and passed a minimal x86-64 Linux syscall smoke test. Real application workloads and Windows EXE/MSI execution remain unverified.\n" + output
                 } else {
                     "Box64 build did not pass its exit-code, version-marker and installed-ELF checks.\n" + output
                 }

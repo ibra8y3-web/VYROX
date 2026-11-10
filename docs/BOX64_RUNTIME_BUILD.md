@@ -32,8 +32,8 @@ The pinned script:
 3. Fetches only the exact immutable Box64 commit and verifies the checked-out SHA.
 4. Configures the ARM64 DynaRec build with the mixed Android/Linux-kernel `BAD_SIGNAL` option.
 5. Builds with two jobs to reduce memory pressure and installs into `/usr/local` inside that RootFS.
-6. Executes `box64 --version`, checks for v0.4.4, then writes the VYROX metadata record.
-7. The Android app independently checks the metadata and AArch64 ELF machine/type before displaying Box64 as installed.
+6. Executes `box64 --version`, checks for v0.4.4, builds a tiny x86-64 Linux ELF using direct `write` and `exit` syscalls, runs it through Box64, and requires its exact smoke-test marker before writing the VYROX metadata record.
+7. The Android app independently checks the metadata, AArch64 ELF machine/type and the passed x86-64 smoke-test record before displaying Box64 as installed.
 
 The official upstream compilation notes explain the ARM64/PRoot flags and DynaRec option.
 
@@ -48,8 +48,8 @@ The build needs a working network connection for APT and Git and sufficient free
 | Immutable v0.4.4 upstream commit | Verified and pinned |
 | App action, PRoot fake-root option and state refresh | Implemented; CI pending |
 | Manifest and Kotlin tests | Added; CI pending |
-| Box64 built on a real Android phone | Not yet verified |
-| Box64 running an x86-64 Linux executable on the phone | Not yet verified |
+| Box64 build action and x86-64 syscall smoke on a physical Android phone | Not yet run by this project; the app action performs it when invoked |
+| A general x86-64 Linux application workload on the phone | Not yet verified; only a minimal syscall smoke program is included |
 | Wine/WOW64, Windows EXE/MSI installation and launch | Not integrated |
 | DXVK/VKD3D-Proton and Direct3D graphics | Not integrated |
 | Full Windows display, audio, keyboard and gamepad bridge | Not integrated |

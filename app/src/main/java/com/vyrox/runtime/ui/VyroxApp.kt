@@ -614,7 +614,7 @@ internal fun RuntimeEngineStatusCard(
             Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
                 "Box64 0.4.4 in selected ARM64 RootFS: " +
-                    if (box64Installed) "built and metadata-verified (execution still needs testing)" else "not installed",
+                    if (box64Installed) "built and x86-64 syscall smoke-tested (full applications remain unverified)" else "not installed",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.bodySmall
             )

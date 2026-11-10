@@ -692,7 +692,7 @@ private fun DesktopPanelContent(
 
             DesktopPanel.RUNTIME -> {
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable)
+                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
             }
         }
 

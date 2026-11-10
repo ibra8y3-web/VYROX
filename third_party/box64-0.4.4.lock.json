@@ -39,7 +39,8 @@
       "libasound2-dev",
       "libpulse-dev",
       "libpcap-dev",
-      "python3"
+      "python3",
+      "binutils-x86-64-linux-gnu"
     ],
     "cmake_options": [
       "-DCMAKE_BUILD_TYPE=Release",
@@ -62,7 +63,10 @@
     "metadata_required": true,
     "build_on_physical_android_device": false,
     "box64_x86_64_linux_execution_tested": false,
-    "windows_pe_execution_tested": false
+    "windows_pe_execution_tested": false,
+    "x86_64_smoke_test_source": "x86-64 Linux assembly using write/exit syscalls; no glibc loader",
+    "x86_64_smoke_test_required": true,
+    "x86_64_smoke_test_passed_by_app_action": false
   },
   "release_gates": {
     "box64_source_build_on_physical_device": false,
