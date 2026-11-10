@@ -1,6 +1,13 @@
 package com.vyrox.runtime.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,12 +43,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleSnapshotInfo
+import com.vyrox.runtime.core.capsule.InstalledWindowsProgram
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.engine.RuntimeCompatibilityPlanner
@@ -81,6 +92,10 @@ private val VyroxArabicText = mapOf(
     "VYROX Installer Library" to "مكتبة التثبيت في VYROX",
     "No imported installers." to "لا توجد ملفات تثبيت مستوردة.",
     "Installed applications" to "التطبيقات المثبتة",
+    "Run" to "تشغيل",
+    "VYROX Windows Desktop" to "سطح مكتب Windows في VYROX",
+    "Close desktop" to "إغلاق سطح المكتب",
+    "Tap here to type" to "اضغط هنا للكتابة",
     "Select a Capsule first" to "اختر بيئة أولًا",
     "Import EXE / MSI / ZIP" to "استيراد EXE أو MSI أو ZIP",
     "Import Capsule backup" to "استيراد نسخة احتياطية لبيئة",
@@ -182,6 +197,10 @@ fun VyroxApp(
     box64Installed: Boolean,
     wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    windowsDesktopVisible: Boolean,
+    windowsDesktopFrame: Bitmap?,
+    windowsDesktopStatus: String,
     isImporting: Boolean,
     activeRuntimeLabel: String?,
     isStoppingRuntimeProcess: Boolean,
@@ -214,6 +233,12 @@ fun VyroxApp(
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     onInstallWine: (LinuxRootFsInfo) -> Unit,
     onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
+    onCloseWindowsDesktop: () -> Unit,
+    onVncPointer: (Int, Int, Int) -> Unit,
+    onVncKeySym: (Int, Boolean) -> Unit,
+    onVncText: (String) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -246,7 +271,16 @@ fun VyroxApp(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            if (isDesktopMode) {
+            if (windowsDesktopVisible) {
+                WindowsDesktopViewer(
+                    frame = windowsDesktopFrame,
+                    status = windowsDesktopStatus,
+                    onClose = onCloseWindowsDesktop,
+                    onPointer = onVncPointer,
+                    onKeySym = onVncKeySym,
+                    onText = onVncText
+                )
+            } else if (isDesktopMode) {
                 DesktopShell(
                     installers = installers,
                     capsules = capsules,
@@ -261,6 +295,9 @@ fun VyroxApp(
                     box64Installed = box64Installed,
                     wineInstalled = wineInstalled,
                     winePrefixInfo = winePrefixInfo,
+                    installedWindowsPrograms = installedWindowsPrograms,
+                    onRunWindowsEntry = onRunWindowsEntry,
+                    onLaunchWindowsProgram = onLaunchWindowsProgram,
                     isImporting = isImporting,
                     activeRuntimeLabel = activeRuntimeLabel,
                     isStoppingRuntimeProcess = isStoppingRuntimeProcess,
@@ -447,6 +484,9 @@ fun VyroxApp(
                         box64Installed = box64Installed,
                         wineInstalled = wineInstalled,
                         winePrefixInfo = winePrefixInfo,
+                        installedWindowsPrograms = installedWindowsPrograms,
+                        onRunWindowsEntry = onRunWindowsEntry,
+                        onLaunchWindowsProgram = onLaunchWindowsProgram,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -477,7 +517,7 @@ fun VyroxApp(
                     ) {
                         Text(vxText("Foundation build"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
-                            "Imports EXE/MSI installers and ZIP archives into private app storage. ZIP extraction is confined to a selected Capsule; Windows executables are not run yet.",
+                            "Import EXE/MSI installers into a Capsule drive, then run them with its verified Wine prefix.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
                         )
                         Button(
@@ -925,6 +965,9 @@ internal fun CapsuleExplorerCard(
     box64Installed: Boolean,
     wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -1138,6 +1181,11 @@ internal fun CapsuleExplorerCard(
                 }
             }
 
+            InstalledWindowsAppsPanel(
+                programs = installedWindowsPrograms,
+                onLaunch = onLaunchWindowsProgram
+            )
+
             OutlinedTextField(
                 value = destinationPath,
                 onValueChange = onDestinationPathChange,
@@ -1200,8 +1248,92 @@ internal fun CapsuleExplorerCard(
                             onCopy = { onCopyEntry(entry) },
                             onMove = { onMoveEntry(entry) },
                             onDelete = { onRequestDelete(entry) },
-                            onExtractZip = { onExtractZipEntry(entry) }
+                            onExtractZip = { onExtractZipEntry(entry) },
+                            onRunWindowsEntry = { onRunWindowsEntry(entry) }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun InstalledWindowsAppsPanel(
+    programs: List<InstalledWindowsProgram>,
+    onLaunch: (InstalledWindowsProgram) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(vxText("Installed applications"), fontWeight = FontWeight.SemiBold)
+            if (programs.isEmpty()) {
+                Text(
+                    vxText("No Windows apps installed yet"),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    programs.forEach { program ->
+                        val iconBitmap = remember(program.iconFile?.absolutePath) {
+                            program.iconFile
+                                ?.takeIf { it.isFile && it.length() in 1..(8L * 1024L * 1024L) }
+                                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+                        }
+                        Card(
+                            modifier = Modifier.width(112.dp).clickable { onLaunch(program) },
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF202940)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                if (iconBitmap != null) {
+                                    Image(
+                                        bitmap = iconBitmap.asImageBitmap(),
+                                        contentDescription = program.name,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.size(48.dp)
+                                            .background(Color(0xFF405D91), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            program.name.take(1).uppercase(Locale.ROOT),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp
+                                        )
+                                    }
+                                }
+                                Text(
+                                    program.name,
+                                    maxLines = 2,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    vxText("Open"),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1217,7 +1349,8 @@ private fun CapsuleFileRow(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
-    onExtractZip: () -> Unit
+    onExtractZip: () -> Unit,
+    onRunWindowsEntry: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1248,6 +1381,12 @@ private fun CapsuleFileRow(
             OutlinedButton(onClick = onMove) { Text(vxText("Move")) }
             if (!entry.isDirectory && entry.name.endsWith(".zip", ignoreCase = true)) {
                 OutlinedButton(onClick = onExtractZip) { Text(vxText("Extract ZIP")) }
+            }
+            if (
+                !entry.isDirectory &&
+                entry.name.substringAfterLast('.', "").lowercase(Locale.ROOT) in setOf("exe", "msi")
+            ) {
+                Button(onClick = onRunWindowsEntry) { Text(vxText("Run")) }
             }
             OutlinedButton(onClick = onDelete) { Text(vxText("Remove")) }
         }

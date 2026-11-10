@@ -71,6 +71,9 @@ internal fun DesktopShell(
     box64Installed: Boolean,
     wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     isImporting: Boolean,
     activeRuntimeLabel: String?,
     isStoppingRuntimeProcess: Boolean,
@@ -214,6 +217,8 @@ internal fun DesktopShell(
                             capsules = capsules,
                             installers = installers,
                             selectedCapsule = selectedCapsule,
+                            installedWindowsPrograms = installedWindowsPrograms,
+                            onLaunchWindowsProgram = onLaunchWindowsProgram,
                             onOpenCapsule = {
                                 onOpenCapsule(it)
                                 selectedPanel = DesktopPanel.FILES
@@ -261,6 +266,9 @@ internal fun DesktopShell(
                                     box64Installed = box64Installed,
                                     wineInstalled = wineInstalled,
                                     winePrefixInfo = winePrefixInfo,
+                                    installedWindowsPrograms = installedWindowsPrograms,
+                                    onRunWindowsEntry = onRunWindowsEntry,
+                                    onLaunchWindowsProgram = onLaunchWindowsProgram,
                                     isImporting = isImporting,
                                     statusMessage = statusMessage,
                                     capsuleName = capsuleName,
@@ -405,6 +413,8 @@ private fun DesktopHomePanel(
     capsules: List<CapsuleInfo>,
     installers: List<ImportedInstaller>,
     selectedCapsule: CapsuleInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     onOpenCapsule: (CapsuleInfo) -> Unit,
     onOpenPanel: (DesktopPanel) -> Unit,
     onImport: () -> Unit
@@ -439,36 +449,22 @@ private fun DesktopHomePanel(
                 DesktopShortcut("▣", capsule.name, "Open environment") { onOpenCapsule(capsule) }
             }
         }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(vxText("Installed applications"), color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(
-                    vxText("Windows programs will appear here after a real Wine installation succeeds."),
-                    color = Color(0xFF9FB5D5),
-                    fontSize = 12.sp
-                )
-            }
-            OutlinedButton(onClick = onImport) { Text(vxText("Import setup file")) }
-        }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0x70203352)),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        if (selectedCapsule != null) {
+            InstalledWindowsAppsPanel(
+                programs = installedWindowsPrograms,
+                onLaunch = onLaunchWindowsProgram
+            )
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0x70203352)),
+                shape = RoundedCornerShape(18.dp)
             ) {
-                Text("＋", color = Color(0xFF9CB8FF), fontSize = 30.sp, fontWeight = FontWeight.Light)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(vxText("No Windows apps installed yet"), color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        vxText("Imported EXE and MSI files are setup files only. They are not displayed as installed apps until Wine installation is connected and verified."),
-                        color = Color(0xFFB6C9E8),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                Text(
+                    vxText("Open a Capsule to see its installed Windows applications."),
+                    color = Color.White,
+                    modifier = Modifier.padding(18.dp)
+                )
             }
         }
         if (capsules.isEmpty()) {
@@ -550,6 +546,9 @@ private fun DesktopPanelContent(
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
     winePrefixInfo: WinePrefixInfo?,
+    installedWindowsPrograms: List<InstalledWindowsProgram>,
+    onRunWindowsEntry: (CapsuleFileEntry) -> Unit,
+    onLaunchWindowsProgram: (InstalledWindowsProgram) -> Unit,
     wineInstalled: Boolean,
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     onInstallWine: (LinuxRootFsInfo) -> Unit,
@@ -708,6 +707,9 @@ private fun DesktopPanelContent(
                         box64Installed = box64Installed,
                         wineInstalled = wineInstalled,
                         winePrefixInfo = winePrefixInfo,
+                        installedWindowsPrograms = installedWindowsPrograms,
+                        onRunWindowsEntry = onRunWindowsEntry,
+                        onLaunchWindowsProgram = onLaunchWindowsProgram,
                         onExtractZipEntry = onExtractZipEntry,
                         onRenameEntry = onRenameCapsuleEntry,
                         onCopyEntry = onCopyCapsuleEntry,
