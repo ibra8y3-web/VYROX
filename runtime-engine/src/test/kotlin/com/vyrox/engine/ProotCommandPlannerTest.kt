@@ -20,6 +20,7 @@ class ProotCommandPlannerTest {
         val proot = File(root, "proot").also(::writeArm64Elf)
         writeElf(File(root, "libtalloc.so.2"), 183)
         writeElf(File(root, "libandroid-shmem.so"), 183)
+        writeElf(File(root, "libproot-loader.so"), 183, elfType = 2)
         val driveC = File(capsule, "drive_c").apply { mkdirs() }
 
         val plan = ProotCommandPlanner.build(
@@ -59,6 +60,21 @@ class ProotCommandPlannerTest {
                     allowedHostRoots = listOf(root)
                 )
             )
+        }
+    }
+
+    @Test
+    fun rejectsMissingOrDynamicGuestLoader() {
+        val (root, proot, rootFs) = createValidRuntime()
+        val loader = File(root, "libproot-loader.so")
+        loader.delete()
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(request(root, proot, rootFs))
+        }
+
+        writeElf(loader, 183, elfType = 3)
+        assertThrows(IllegalArgumentException::class.java) {
+            ProotCommandPlanner.build(request(root, proot, rootFs))
         }
     }
 
@@ -226,6 +242,7 @@ class ProotCommandPlannerTest {
         val proot = File(root, "proot").also(::writeArm64Elf)
         writeElf(File(root, "libtalloc.so.2"), 183)
         writeElf(File(root, "libandroid-shmem.so"), 183)
+        writeElf(File(root, "libproot-loader.so"), 183, elfType = 2)
         val rootFs = createRootFs(root)
         return Triple(root, proot, rootFs)
     }
@@ -250,7 +267,12 @@ class ProotCommandPlannerTest {
 
     private fun writeArm64Elf(file: File) = writeElf(file, 183)
 
-    private fun writeElf(file: File, machine: Int, littleEndian: Boolean = true) {
+    private fun writeElf(
+        file: File,
+        machine: Int,
+        littleEndian: Boolean = true,
+        elfType: Int = 3
+    ) {
         file.parentFile?.mkdirs()
         val header = ByteArray(64)
         header[0] = 0x7F.toByte()
@@ -260,6 +282,8 @@ class ProotCommandPlannerTest {
         header[4] = 2
         header[5] = 1
         header[6] = 1
+        header[16] = (elfType and 0xFF).toByte()
+        header[17] = ((elfType ushr 8) and 0xFF).toByte()
         if (littleEndian) {
             header[18] = (machine and 0xFF).toByte()
             header[19] = ((machine ushr 8) and 0xFF).toByte()

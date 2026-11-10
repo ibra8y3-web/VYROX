@@ -43,6 +43,17 @@ object ProotCommandPlanner {
         require(nativeLibraryRoot.isDirectory && isWithin(nativeLibraryRoot, proot)) {
             "PRoot must be packaged inside the application's native library directory."
         }
+        val loader = File(nativeLibraryRoot, PROOT_LOADER_FILE_NAME)
+        require(
+            loader.isFile &&
+                loader.canExecute() &&
+                !java.nio.file.Files.isSymbolicLink(loader.toPath()) &&
+                isWithin(nativeLibraryRoot, loader) &&
+                readElfMachine(loader) == ARM64_ELF_MACHINE &&
+                readElfType(loader) == ELF_TYPE_EXECUTABLE
+        ) {
+            "A static ARM64 PRoot guest loader is missing from the APK native-library directory."
+        }
         REQUIRED_NATIVE_LIBRARIES.forEach { libraryName ->
             val library = File(nativeLibraryRoot, libraryName)
             require(
@@ -229,6 +240,27 @@ object ProotCommandPlanner {
         require(value.length <= MAX_ARGUMENT_LENGTH) { "A command argument is too long." }
     }
 
+    private fun readElfType(file: File): Int? {
+        val header = ByteArray(20)
+        FileInputStream(file).use { input ->
+            var offset = 0
+            while (offset < header.size) {
+                val read = input.read(header, offset, header.size - offset)
+                if (read < 0) return null
+                offset += read
+            }
+        }
+        if (
+            header[0] != 0x7F.toByte() ||
+            header[1] != 'E'.code.toByte() ||
+            header[2] != 'L'.code.toByte() ||
+            header[3] != 'F'.code.toByte() ||
+            header[4] != 2.toByte() ||
+            header[5] != 1.toByte()
+        ) return null
+        return (header[16].toInt() and 0xFF) or ((header[17].toInt() and 0xFF) shl 8)
+    }
+
     private fun readElfMachine(file: File): Int? {
         val header = ByteArray(20)
         FileInputStream(file).use { input ->
@@ -281,6 +313,8 @@ object ProotCommandPlanner {
     )
 
     private const val ARM64_ELF_MACHINE = 183
+    private const val ELF_TYPE_EXECUTABLE = 2
+    private const val PROOT_LOADER_FILE_NAME = "libproot-loader.so"
     private val REQUIRED_NATIVE_LIBRARIES = listOf("libtalloc.so.2", "libandroid-shmem.so")
     private const val MAX_BIND_MOUNTS = 32
     private const val MAX_ARGUMENTS = 256
