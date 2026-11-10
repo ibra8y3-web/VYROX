@@ -35,6 +35,14 @@ android {
         compose = true
     }
 
+    // Extract the future PRoot PIE payload into nativeLibraryDir. Never
+    // copy executable code from the APK into writable filesDir storage.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

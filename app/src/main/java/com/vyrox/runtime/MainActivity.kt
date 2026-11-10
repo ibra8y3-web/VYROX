@@ -1,6 +1,7 @@
 package com.vyrox.runtime
 
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
@@ -16,6 +17,7 @@ import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.capsule.CapsuleStorage
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.files.InstallerStorage
+import com.vyrox.runtime.core.engine.ProotExecutableLocator
 import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.runtime.core.host.HostCapabilitiesProbe
 import com.vyrox.engine.LinuxRootFsInfo
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var capsuleStorage: CapsuleStorage
     private lateinit var hostCapabilities: HostCapabilities
     private lateinit var rootFsManager: LinuxRootFsManager
+    private var prootBinaryAvailable by mutableStateOf(false)
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
     private val capsuleEntries = mutableStateListOf<CapsuleFileEntry>()
@@ -76,6 +79,10 @@ class MainActivity : ComponentActivity() {
         capsuleStorage = CapsuleStorage(File(filesDir, "capsules"))
         rootFsManager = LinuxRootFsManager(File(filesDir, "capsules"))
         hostCapabilities = HostCapabilitiesProbe.read(applicationContext)
+        prootBinaryAvailable = ProotExecutableLocator.locate(
+            nativeLibraryDirectory = File(applicationInfo.nativeLibraryDir),
+            supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
+        ) != null
         installers.addAll(installerStorage.listImported())
         capsules.addAll(capsuleStorage.listCapsules())
 
@@ -90,6 +97,7 @@ class MainActivity : ComponentActivity() {
                 capsuleSearchResults = capsuleSearchResults.toList(),
                 rootFsImages = rootFsImages.toList(),
                 hostCapabilities = hostCapabilities,
+                prootBinaryAvailable = prootBinaryAvailable,
                 isImporting = isImporting,
                 statusMessage = statusMessage,
                 onImport = {

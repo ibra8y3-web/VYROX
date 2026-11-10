@@ -65,6 +65,7 @@ fun VyroxApp(
     capsuleSearchResults: List<CapsuleFileEntry>,
     rootFsImages: List<LinuxRootFsInfo>,
     hostCapabilities: HostCapabilities,
+    prootBinaryAvailable: Boolean,
     isImporting: Boolean,
     statusMessage: String?,
     onImport: () -> Unit,
@@ -123,7 +124,7 @@ fun VyroxApp(
 
 
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages)
+                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -381,7 +382,8 @@ fun VyroxApp(
 @Composable
 private fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
-    rootFsImages: List<LinuxRootFsInfo>
+    rootFsImages: List<LinuxRootFsInfo>,
+    prootBinaryAvailable: Boolean
 ) {
     val vulkan = VulkanProbeParser.parse(profile.nativeVulkanInfo)
     val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
@@ -395,7 +397,7 @@ private fun RuntimeEngineStatusCard(
             },
             arm64WineInstalled = false,
             box64Installed = false,
-            prootInstalled = false,
+            prootInstalled = prootBinaryAvailable,
             d3d11Requested = true,
             dxvkInstalled = false,
             vulkan = vulkan
@@ -412,6 +414,15 @@ private fun RuntimeEngineStatusCard(
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(
+                "PRoot APK binary: " + if (prootBinaryAvailable) {
+                    "present (device execution not verified)"
+                } else {
+                    "not packaged for this device"
+                },
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
             Text(
                 "Windows x64 modeled preflight: " + if (readiness.preflightPassed) "Ready" else "Not ready",
                 color = MaterialTheme.colorScheme.secondary,

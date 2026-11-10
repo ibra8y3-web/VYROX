@@ -49,9 +49,12 @@ It does not start PRoot. The APK currently contains no PRoot binary. Android 10/
 `execve()` of binaries from a target app's writable home directory. The
 packaging path must therefore place a PRoot PIE executable inside the APK's
 native-library payload and resolve it through `applicationInfo.nativeLibraryDir`.
-This packaging strategy still needs an actual APK extraction/execute test on a
-physical Android 12+ device; a JNI library directory path alone does not prove
-that a particular executable layout will run.
+The Android Gradle build now uses legacy JNI packaging so native payloads are
+extracted into `nativeLibraryDir`. The app-side locator checks for
+`libproot.so`, an executable ARM64 little-endian ELF file, without copying it
+to writable storage. This packaging strategy still needs an actual APK
+extraction/execute test on a physical Android 12+ device; a matching file path
+alone does not prove that a particular executable layout will run.
 
 A separate `RuntimeProcessSupervisor` can start a validated command plan,
 capture combined stdout/stderr into a private log whose full size is bounded,
