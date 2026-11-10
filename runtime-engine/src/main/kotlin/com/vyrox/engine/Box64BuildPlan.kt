@@ -30,6 +30,14 @@ object Box64BuildPlan {
 
         printf '%s\n' 'VYROX: building Box64 0.4.4 for ARM64 glibc'
         test -x /bin/sh
+        # Keep build tools' temporary files inside the guest RootFS.
+        [ ! -L /tmp ] || {
+            echo 'Guest /tmp is a symbolic link; refusing to build through it.' >&2
+            exit 19
+        }
+        mkdir -p /tmp
+        chmod 1777 /tmp
+        export TMPDIR=/tmp
         command -v apt-get >/dev/null 2>&1 || {
             echo 'This build action currently supports APT-based Debian or Ubuntu ARM64 RootFS images.' >&2
             exit 20
@@ -113,7 +121,7 @@ object Box64BuildPlan {
             mov $1, %rax
             mov $1, %rdi
             lea message(%rip), %rsi
-            mov $message_length, %rdx
+            mov ${'$'}message_length, %rdx
             syscall
             mov $60, %rax
             xor %rdi, %rdi

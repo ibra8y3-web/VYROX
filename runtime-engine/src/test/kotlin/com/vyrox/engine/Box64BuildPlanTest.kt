@@ -21,6 +21,8 @@ class Box64BuildPlanTest {
         assertTrue(script.contains("x86_64-linux-gnu-as --64"))
         assertTrue(script.contains("x86_64-linux-gnu-ld -static"))
         assertTrue(script.contains("VYROX_BOX64_X86_64_SMOKE_OK"))
+        assertTrue(script.contains("mov " + '$' + "message_length, %rdx"))
+        assertTrue(script.contains("export TMPDIR=/tmp"))
         assertTrue(script.contains("x86_64_smoke_test=passed"))
         assertTrue(script.contains("git init --template=/dev/null"))
         assertTrue(script.contains("\$BOX64_BINARY"))
