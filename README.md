@@ -29,7 +29,7 @@ The landscape-first desktop opens to a wallpaper-style workspace. Its settings a
 | Desktop shell | Desktop workspace, settings panel, navigation to Capsules, files, installer library and runtime tools; Arabic RTL and English LTR |
 | Capsule workspaces | Separate logical C:/D: folders; create, rename, clone, backup, checksummed snapshots and restore |
 | File manager | Browse, import, create, copy, move, rename, search, delete and safe ZIP extraction within a Capsule |
-| Installer inspection | EXE/PE, MSI and ZIP inspection; app-private library; validated EXE/MSI copy to Capsule C:\\Downloads and launch through the Capsule Wine prefix |
+| Installer inspection | EXE/PE, MSI and ZIP inspection; app-private library; validated x86/x86-64 EXE or MSI copy to Capsule C:\\Downloads and launch through the Capsule Wine prefix |
 | Linux RootFS | TAR/TAR.GZ/TAR.XZ import, staged extraction, path/size validation and metadata |
 | PRoot | Pinned Android native build and APK packaging workflow; guest command planner, bind-mount validation, bounded logs and process stop/timeout |
 | Box64 | Pinned v0.4.4 source-build action inside an ARM64 glibc RootFS, with ELF/version and minimal x86-64 syscall smoke checks |
