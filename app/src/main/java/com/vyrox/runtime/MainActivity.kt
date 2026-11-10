@@ -1333,7 +1333,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         val capsule = selectedCapsule ?: return
-        val prefix = winePrefixInfo ?: run {
+        val prefix = winePrefixInfo?.takeIf { it.capsuleId == capsule.id } ?: run {
             statusMessage = "Create and verify this Capsule's Wine prefix before installing or running Windows programs."
             return
         }
@@ -1348,7 +1348,7 @@ class MainActivity : ComponentActivity() {
 
     private fun launchWindowsProgram(program: InstalledWindowsProgram) {
         val capsule = selectedCapsule ?: return
-        val prefix = winePrefixInfo ?: run {
+        val prefix = winePrefixInfo?.takeIf { it.capsuleId == capsule.id } ?: run {
             statusMessage = "Create and verify this Capsule's Wine prefix first."
             return
         }
@@ -1367,7 +1367,7 @@ class MainActivity : ComponentActivity() {
         displayName: String
     ) {
         if (isImporting || windowsDesktopVisible) return
-        val prefix = winePrefixInfo ?: run {
+        val prefix = winePrefixInfo?.takeIf { it.capsuleId == capsule.id } ?: run {
             statusMessage = "This Capsule has no verified Wine prefix."
             return
         }
