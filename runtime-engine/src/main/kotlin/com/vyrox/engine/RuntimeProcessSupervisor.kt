@@ -26,7 +26,7 @@ class ManagedRuntimeProcess internal constructor(
 ) {
     fun await(timeoutMillis: Long): RuntimeProcessResult {
         require(timeoutMillis in 1..RuntimeProcessSupervisor.MAX_TIMEOUT_MILLIS) {
-            "Runtime timeout must be between 1 ms and 1 hour."
+            "Runtime timeout must be between 1 ms and 4 hours."
         }
         val completed = process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
         if (!completed) terminateProcess()
@@ -260,7 +260,7 @@ class RuntimeProcessSupervisor(
     companion object {
         const val DEFAULT_MAX_LOG_BYTES: Long = 2L * 1024L * 1024L
         const val MAX_LOG_BYTES: Long = 10L * 1024L * 1024L
-        const val MAX_TIMEOUT_MILLIS: Long = 60L * 60L * 1000L
+        const val MAX_TIMEOUT_MILLIS: Long = 4L * 60L * 60L * 1000L
         private const val MAX_ARGUMENTS = 256
         private const val MAX_ENVIRONMENT_ITEMS = 128
         private const val MAX_ARGUMENT_LENGTH = 8192
