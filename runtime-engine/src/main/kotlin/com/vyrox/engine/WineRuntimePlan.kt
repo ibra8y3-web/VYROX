@@ -174,8 +174,8 @@ object WineRuntimePlan {
             export HOME=/tmp/vyrox-home
             export XDG_RUNTIME_DIR=/tmp/vyrox-runtime
 
-            mkdir -p /tmp/.X11-unix "$HOME" "$XDG_RUNTIME_DIR"
-            chmod 0700 "$HOME" "$XDG_RUNTIME_DIR"
+            mkdir -p /tmp/.X11-unix "@D@HOME" "@D@XDG_RUNTIME_DIR"
+            chmod 0700 "@D@HOME" "@D@XDG_RUNTIME_DIR"
             Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -ac +extension GLX +render -noreset >/tmp/vyrox-xvfb.log 2>&1 &
             XVFB_PID=@D@!
             VNC_PID=''
