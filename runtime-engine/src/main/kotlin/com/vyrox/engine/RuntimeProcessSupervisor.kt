@@ -62,13 +62,15 @@ class ManagedRuntimeProcess internal constructor(
 }
 
 /**
- * Starts a prevalidated ProotCommandPlan and captures combined stdout/stderr.
+ * Starts a prevalidated PRoot command and captures combined stdout/stderr.
  *
- * This is a process supervisor, not a security sandbox. The caller must only
- * provide command plans created from trusted, app-private engine binaries.
+ * This supervisor is not a security sandbox. It only accepts an executable,
+ * working directory and log directory below caller-approved storage roots.
  */
-class RuntimeProcessSupervisor(private val logDirectory: File) {
-
+class RuntimeProcessSupervisor(
+    private val logDirectory: File,
+    private val allowedHostRoots: List<File>
+) {
     @Throws(IOException::class)
     fun start(
         plan: ProotCommandPlan,
@@ -76,33 +78,55 @@ class RuntimeProcessSupervisor(private val logDirectory: File) {
         maxLogBytes: Long = DEFAULT_MAX_LOG_BYTES
     ): ManagedRuntimeProcess {
         require(RUN_ID_PATTERN.matches(runId)) { "Invalid runtime run identifier." }
-        require(maxLogBytes in 1..MAX_LOG_BYTES) { "Runtime log size must be between 1 byte and 10 MiB." }
+        require(maxLogBytes in 1..MAX_LOG_BYTES) {
+            "Runtime log size must be between 1 byte and 10 MiB."
+        }
+        require(allowedHostRoots.isNotEmpty()) {
+            "At least one approved app-private root is required."
+        }
+        require(plan.arguments.size <= MAX_ARGUMENTS) { "Too many runtime arguments." }
+        plan.arguments.forEach(::validateProcessArgument)
+        require(plan.environment.size <= MAX_ENVIRONMENT_ITEMS) {
+            "Too many runtime environment variables."
+        }
+        plan.environment.forEach { (key, value) ->
+            require(ENVIRONMENT_KEY.matches(key)) { "Invalid runtime environment variable name." }
+            validateProcessArgument(value)
+        }
 
         val executable = plan.executable.canonicalFile
         if (!executable.isFile || !executable.canExecute()) {
             throw IOException("The runtime executable is missing or is not executable.")
         }
+        require(isInsideApprovedRoot(executable)) {
+            "The runtime executable is outside the app-approved directories."
+        }
         val workingDirectory = plan.processWorkingDirectory.canonicalFile
         if (!workingDirectory.isDirectory) {
             throw IOException("The runtime working directory does not exist.")
         }
+        require(isInsideApprovedRoot(workingDirectory)) {
+            "The runtime working directory is outside the app-approved directories."
+        }
+
         if (!logDirectory.exists() && !logDirectory.mkdirs()) {
             throw IOException("Could not create the runtime log directory.")
         }
         val canonicalLogDirectory = logDirectory.canonicalFile
+        require(isInsideApprovedRoot(canonicalLogDirectory)) {
+            "The runtime log directory is outside the app-approved directories."
+        }
         val logFile = File(canonicalLogDirectory, "$runId.log").canonicalFile
         if (logFile.parentFile != canonicalLogDirectory || logFile.exists()) {
             throw IOException("The runtime log path is invalid or already exists.")
         }
-        if (!logFile.createNewFile()) {
-            throw IOException("Could not create the runtime log file.")
-        }
 
         val command = ArrayList<String>(plan.arguments.size + 1)
         command += executable.absolutePath
-        plan.arguments.forEach { argument ->
-            require(!argument.contains('\u0000')) { "Runtime arguments cannot contain NUL." }
-            command += argument
+        command.addAll(plan.arguments)
+
+        if (!logFile.createNewFile()) {
+            throw IOException("Could not create the runtime log file.")
         }
 
         try {
@@ -142,6 +166,8 @@ class RuntimeProcessSupervisor(private val logDirectory: File) {
         truncated: AtomicBoolean
     ) {
         var written = 0L
+        val marker = LOG_TRUNCATION_MARKER.toByteArray()
+        val contentLimit = (maxBytes - marker.size).coerceAtLeast(0L)
         try {
             process.inputStream.use { input ->
                 FileOutputStream(logFile, true).buffered().use { output ->
@@ -151,18 +177,17 @@ class RuntimeProcessSupervisor(private val logDirectory: File) {
                         if (read < 0) break
                         if (read == 0) continue
 
-                        val remaining = maxBytes - written
+                        val remaining = contentLimit - written
                         if (remaining > 0L) {
                             val toWrite = minOf(read.toLong(), remaining).toInt()
                             output.write(buffer, 0, toWrite)
                             written += toWrite
                         }
-                        if (toWriteLessThan(read, remaining)) {
-                            truncated.set(true)
-                        }
+                        if (read.toLong() > remaining) truncated.set(true)
                     }
                     if (truncated.get()) {
-                        output.write("\n[VYROX] Runtime log reached its configured size limit.\n".toByteArray())
+                        val markerBytes = minOf(marker.size.toLong(), maxBytes - written).toInt()
+                        if (markerBytes > 0) output.write(marker, 0, markerBytes)
                     }
                 }
             }
@@ -171,13 +196,29 @@ class RuntimeProcessSupervisor(private val logDirectory: File) {
         }
     }
 
-    private fun toWriteLessThan(read: Int, remaining: Long): Boolean =
-        read.toLong() > remaining
+    private fun validateProcessArgument(value: String) {
+        require(!value.contains('\u0000')) { "Runtime arguments cannot contain NUL." }
+        require(value.length <= MAX_ARGUMENT_LENGTH) { "A runtime argument is too long." }
+    }
+
+    private fun isInsideApprovedRoot(candidate: File): Boolean {
+        val path = candidate.canonicalPath
+        return allowedHostRoots.any { root ->
+            if (!root.isDirectory) return@any false
+            val rootPath = root.canonicalPath
+            path == rootPath || path.startsWith(rootPath + File.separator)
+        }
+    }
 
     companion object {
         const val DEFAULT_MAX_LOG_BYTES: Long = 2L * 1024L * 1024L
         const val MAX_LOG_BYTES: Long = 10L * 1024L * 1024L
         const val MAX_TIMEOUT_MILLIS: Long = 60L * 60L * 1000L
+        private const val MAX_ARGUMENTS = 256
+        private const val MAX_ENVIRONMENT_ITEMS = 128
+        private const val MAX_ARGUMENT_LENGTH = 8192
+        private const val LOG_TRUNCATION_MARKER = "\n[VYROX] Runtime log truncated.\n"
+        private val ENVIRONMENT_KEY = Regex("[A-Za-z_][A-Za-z0-9_]*")
         private val RUN_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
     }
 }

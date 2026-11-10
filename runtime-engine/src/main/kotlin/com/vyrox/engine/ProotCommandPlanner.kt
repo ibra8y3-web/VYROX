@@ -2,6 +2,7 @@ package com.vyrox.engine
 
 import java.io.File
 import java.nio.file.Paths
+import java.util.Properties
 
 data class ProotBindMount(
     val hostSource: File,
@@ -51,8 +52,12 @@ object ProotCommandPlanner {
         require(request.rootFsArchitecture == LinuxRootFsArchitecture.ARM64) {
             "The initial Android PRoot host must use an ARM64 RootFS."
         }
-        require(File(rootFs, "bin/sh").isFile || File(rootFs, "usr/bin/sh").isFile) {
-            "The selected RootFS does not contain a shell."
+        validateImportedRootFsMetadata(rootFs, request.rootFsArchitecture)
+        val shell = sequenceOf(File(rootFs, "bin/sh"), File(rootFs, "usr/bin/sh"))
+            .firstOrNull { it.isFile }
+            ?: throw IllegalArgumentException("The selected RootFS does not contain a shell.")
+        require(isArm64LinuxElf64(shell)) {
+            "The initial Android RootFS must contain a 64-bit little-endian AArch64 shell."
         }
 
         val command = resolveGuestPath(rootFs, request.guestCommand)
@@ -109,6 +114,46 @@ object ProotCommandPlanner {
         )
     }
 
+    private fun validateImportedRootFsMetadata(
+        rootFs: File,
+        expectedArchitecture: LinuxRootFsArchitecture
+    ) {
+        val metadataFile = File(rootFs, ".vyrox-rootfs.properties")
+        require(metadataFile.isFile) {
+            "The selected RootFS was not imported by the VYROX RootFS manager."
+        }
+        val metadata = Properties()
+        metadataFile.inputStream().buffered().use { metadata.load(it) }
+        require(metadata.getProperty("architecture") == expectedArchitecture.name) {
+            "RootFS metadata architecture does not match the selected image."
+        }
+        require(metadata.getProperty("archiveSha256").orEmpty().matches(Regex("[0-9a-fA-F]{64}"))) {
+            "The selected RootFS metadata has no valid archive digest."
+        }
+    }
+
+    private fun isArm64LinuxElf64(file: File): Boolean {
+        val header = ByteArray(20)
+        file.inputStream().use { input ->
+            var offset = 0
+            while (offset < header.size) {
+                val count = input.read(header, offset, header.size - offset)
+                if (count < 0) return false
+                if (count > 0) offset += count
+            }
+        }
+        val validMagic = header[0] == 0x7F.toByte() &&
+            header[1] == 'E'.code.toByte() &&
+            header[2] == 'L'.code.toByte() &&
+            header[3] == 'F'.code.toByte()
+        val elfClass = header[4].toInt() and 0xFF
+        val encoding = header[5].toInt() and 0xFF
+        val version = header[6].toInt() and 0xFF
+        val machine = (header[18].toInt() and 0xFF) or
+            ((header[19].toInt() and 0xFF) shl 8)
+        return validMagic && elfClass == 2 && encoding == 1 && version == 1 && machine == 183
+    }
+
     private fun resolveGuestPath(rootFs: File, guestPath: String): File {
         validateGuestPath(guestPath)
         val normalized = Paths.get(guestPath).normalize()
@@ -129,7 +174,11 @@ object ProotCommandPlanner {
         require(!path.contains('\u0000') && !path.contains(':') && !path.contains('\\')) {
             "Invalid guest path."
         }
-        val normalized = Paths.get(path).normalize()
+        val pathObject = Paths.get(path)
+        require(pathObject.none { it.toString() == ".." || it.toString() == "." }) {
+            "Guest path contains traversal or dot segments."
+        }
+        val normalized = pathObject.normalize()
         require(!normalized.startsWith("..")) { "Guest path contains traversal." }
     }
 

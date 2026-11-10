@@ -20,10 +20,11 @@ class ProotCommandPlannerTest {
         File(rootFs, "etc").mkdirs()
         File(rootFs, "bin").mkdirs()
         File(rootFs, "etc/os-release").writeText("ID=ubuntu")
-        File(rootFs, "bin/sh").apply {
-            writeText("#!/bin/sh")
-            setExecutable(true)
-        }
+        File(rootFs, ".vyrox-rootfs.properties").writeText(
+            "architecture=ARM64\\narchiveSha256=" + "a".repeat(64) + "\\n"
+        )
+        File(rootFs, "bin/sh").writeBytes(arm64ElfHeader())
+        File(rootFs, "bin/sh").setExecutable(true)
         val proot = File(root, "proot").apply {
             writeText("binary placeholder")
             setExecutable(true)
@@ -108,7 +109,11 @@ class ProotCommandPlannerTest {
         File(outside, "etc").mkdirs()
         File(outside, "etc/os-release").writeText("ID=other")
         File(outside, "bin").mkdirs()
-        File(outside, "bin/sh").writeText("#!/bin/sh")
+        File(outside, "bin/sh").writeBytes(arm64ElfHeader())
+        File(outside, "bin/sh").setExecutable(true)
+        File(outside, ".vyrox-rootfs.properties").writeText(
+            "architecture=ARM64\\narchiveSha256=" + "b".repeat(64) + "\\n"
+        )
         assertThrows(IllegalArgumentException::class.java) {
             ProotCommandPlanner.build(
                 ProotLaunchRequest(
@@ -153,5 +158,17 @@ class ProotCommandPlannerTest {
             setExecutable(true)
         }
         return Triple(root, proot, rootFs)
+    }
+
+    private fun arm64ElfHeader(): ByteArray = ByteArray(64).apply {
+        this[0] = 0x7F
+        this[1] = 'E'.code.toByte()
+        this[2] = 'L'.code.toByte()
+        this[3] = 'F'.code.toByte()
+        this[4] = 2
+        this[5] = 1
+        this[6] = 1
+        this[18] = 183.toByte()
+        this[19] = 0
     }
 }

@@ -15,7 +15,7 @@ Termux package build files: https://github.com/termux/termux-packages/tree/maste
 `ProotCommandPlanner` builds a ProcessBuilder-ready argument vector and checks:
 
 - the PRoot binary is executable and stored below an approved app-private root;
-- the RootFS is an approved, metadata-validated ARM64 image;
+- the RootFS is an approved image with VYROX metadata, a matching architecture tag, a valid archive digest, and a 64-bit little-endian AArch64 shell;
 - the guest command exists and is executable inside that RootFS;
 - the guest working directory exists;
 - bind sources are inside explicitly approved host roots;
@@ -25,9 +25,12 @@ Termux package build files: https://github.com/termux/termux-packages/tree/maste
 It does not start PRoot. The APK currently contains no PRoot binary.
 
 A separate `RuntimeProcessSupervisor` can start a validated command plan,
-capture combined stdout/stderr into a bounded private log, enforce a maximum
-runtime, and terminate the process. It is generic process supervision, not a
-security sandbox, and the VYROX UI does not yet invoke it for Windows programs.
+capture combined stdout/stderr into a private log whose full size is bounded,
+enforce a maximum runtime, and terminate the process. It accepts only
+executables, working directories, and log paths below caller-approved roots;
+it validates argument/environment counts and lengths before creating a log.
+It is generic process supervision, not a security sandbox, and the VYROX UI
+does not yet invoke it for Windows programs.
 
 ## Required next steps
 

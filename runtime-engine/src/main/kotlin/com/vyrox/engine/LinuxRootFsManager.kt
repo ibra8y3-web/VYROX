@@ -453,13 +453,16 @@ class LinuxRootFsManager(private val capsuleRoot: File) {
             header[3] != 'F'.code.toByte()
         ) return null
 
-        val machine = when (header[5].toInt() and 0xFF) {
-            1 -> (header[18].toInt() and 0xFF) or
-                ((header[19].toInt() and 0xFF) shl 8)
-            2 -> ((header[18].toInt() and 0xFF) shl 8) or
-                (header[19].toInt() and 0xFF)
-            else -> return null
-        }
+        // VYROX's initial Android runtime target is 64-bit little-endian ELF.
+        // The e_machine field alone is insufficient: an ELF32 file can carry
+        // the same numeric machine identifier.
+        val elfClass = header[4].toInt() and 0xFF
+        val dataEncoding = header[5].toInt() and 0xFF
+        val elfVersion = header[6].toInt() and 0xFF
+        if (elfClass != 2 || dataEncoding != 1 || elfVersion != 1) return null
+
+        val machine = (header[18].toInt() and 0xFF) or
+            ((header[19].toInt() and 0xFF) shl 8)
         return LinuxRootFsArchitecture.entries.firstOrNull { it.elfMachine == machine }
     }
 

@@ -18,7 +18,7 @@ class RuntimeProcessSupervisorTest {
         val logs = temporaryFolder.newFolder("logs")
         val plan = shellPlan(working, listOf("-c", "printf 'VYROX_STDOUT'; printf 'VYROX_STDERR' >&2"))
 
-        val process = RuntimeProcessSupervisor(logs).start(plan, "successful-run")
+        val process = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin"))).start(plan, "successful-run")
         val result = process.await(5_000)
 
         assertEquals(0, result.exitCode)
@@ -32,7 +32,7 @@ class RuntimeProcessSupervisorTest {
     fun terminatesProcessWhenTimeoutIsReached() {
         val working = temporaryFolder.newFolder("timeout-work")
         val logs = temporaryFolder.newFolder("timeout-logs")
-        val process = RuntimeProcessSupervisor(logs).start(
+        val process = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin"))).start(
             shellPlan(working, listOf("-c", "sleep 5")),
             "timeout-run"
         )
@@ -47,7 +47,7 @@ class RuntimeProcessSupervisorTest {
     fun capsRuntimeLogSize() {
         val working = temporaryFolder.newFolder("large-work")
         val logs = temporaryFolder.newFolder("large-logs")
-        val process = RuntimeProcessSupervisor(logs).start(
+        val process = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin"))).start(
             shellPlan(working, listOf("-c", "yes VYROX_RUNTIME_LOG")),
             "large-log-run",
             maxLogBytes = 1024
@@ -56,14 +56,36 @@ class RuntimeProcessSupervisorTest {
         val result = process.await(200)
 
         assertTrue(result.logTruncated)
-        assertTrue(result.logFile.length() < 2_048L)
+        assertTrue(result.logFile.length() <= 1_024L)
+    }
+
+    @Test
+    fun refusesExecutableOutsideApprovedRoots() {
+        val working = temporaryFolder.newFolder("approved-work")
+        val logs = temporaryFolder.newFolder("approved-logs")
+        val supervisor = RuntimeProcessSupervisor(logs, listOf(working))
+        val exception = org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            supervisor.start(shellPlan(working, listOf("-c", "true")), "outside-executable")
+        }
+        assertTrue(exception.message.orEmpty().contains("outside"))
+    }
+
+    @Test
+    fun rejectsNulArgumentBeforeCreatingLogFile() {
+        val working = temporaryFolder.newFolder("invalid-argument-work")
+        val logs = temporaryFolder.newFolder("invalid-argument-logs")
+        val supervisor = RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin")))
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            supervisor.start(shellPlan(working, listOf("-c", "bad\\u0000argument")), "invalid-argument")
+        }
+        assertFalse(File(logs, "invalid-argument.log").exists())
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun rejectsInvalidRunId() {
         val working = temporaryFolder.newFolder("bad-work")
         val logs = temporaryFolder.newFolder("bad-logs")
-        RuntimeProcessSupervisor(logs).start(
+        RuntimeProcessSupervisor(logs, listOf(temporaryFolder.root, File("/bin"))).start(
             shellPlan(working, listOf("-c", "true")),
             "../bad-run"
         )

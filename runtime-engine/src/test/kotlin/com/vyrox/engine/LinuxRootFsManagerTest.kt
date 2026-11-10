@@ -98,6 +98,32 @@ class LinuxRootFsManagerTest {
     }
 
     @Test
+    fun rejectsElf32ShellEvenWhenMachineFieldSaysAarch64() {
+        val manager = LinuxRootFsManager(createCapsuleRoot())
+        val entries = validRootFsEntries(183).toMutableList()
+        entries[1] = "bin/sh" to createElfHeader(183).also { it[4] = 1 }
+        val archive = createTarArchive(entries)
+
+        assertThrows(IOException::class.java) {
+            manager.importArchive(CAPSULE_ID, "elf32-arm64.tar", ByteArrayInputStream(archive))
+        }
+        assertTrue(manager.listInstalled(CAPSULE_ID).isEmpty())
+    }
+
+    @Test
+    fun rejectsBigEndianElfForInitialAndroidRootFs() {
+        val manager = LinuxRootFsManager(createCapsuleRoot())
+        val entries = validRootFsEntries(183).toMutableList()
+        entries[1] = "bin/sh" to createElfHeader(183).also { it[5] = 2 }
+        val archive = createTarArchive(entries)
+
+        assertThrows(IOException::class.java) {
+            manager.importArchive(CAPSULE_ID, "big-endian.tar", ByteArrayInputStream(archive))
+        }
+        assertTrue(manager.listInstalled(CAPSULE_ID).isEmpty())
+    }
+
+    @Test
     fun preservesPreviousRootFsWhenNewArchiveIsInvalid() {
         val manager = LinuxRootFsManager(createCapsuleRoot())
         val first = createTarArchive(validRootFsEntries(183, "First"))
