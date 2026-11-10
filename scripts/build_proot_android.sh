@@ -116,6 +116,7 @@ Checking simple C program: OK
 building library support: OK
 Checking for large file support: OK
 Checking for -D_FILE_OFFSET_BITS=64: OK
+Checking for -D_LARGE_FILES: OK
 Checking for WORDS_BIGENDIAN: OK
 Checking for C99 vsnprintf: OK
 Checking for HAVE_SECURE_MKSTEMP: OK
@@ -132,7 +133,6 @@ Checking for working strptime: OK
 Checking for HAVE_SHARED_MMAP: OK
 Checking for HAVE_MREMAP: OK
 Checking for HAVE_INCOHERENT_MMAP: OK
-Checking getconf LFS_CFLAGS: OK
 Checking getconf large file support flags work: OK
 ANSWERS
 
@@ -195,9 +195,10 @@ PY
   export CC AR RANLIB STRIP OBJCOPY OBJDUMP
   export CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\" -I. -I$PROOT_SRC/src -I$PREFIX/include"
   export CFLAGS="-Wall -Wextra -O2 -fPIC -fPIE -DWITH_LIBANDROID_SHMEM"
-  export LDFLAGS="-L$PREFIX/lib -Wl,-z,noexecstack -Wl,--no-undefined -Wl,-z,max-page-size=16384 -pie -ltalloc -landroid-shmem -landroid -llog"
   unset PROOT_UNBUNDLE_LOADER || true
-  make -j"$JOBS" LD="$CC" PROOT_WITH_LIBANDROID_SHMEM=true proot loader/loader
+  make -j"$JOBS" LD="$CC" \
+    LDFLAGS="-L$PREFIX/lib -Wl,-z,noexecstack -Wl,--no-undefined -Wl,-z,max-page-size=16384 -pie -ltalloc -landroid-shmem -landroid -llog" \
+    proot loader/loader
 )
 
 [[ -x "$PROOT_SRC/src/proot" ]] || {
