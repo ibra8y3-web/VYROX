@@ -298,7 +298,14 @@ class MainActivity : ComponentActivity() {
             return
         }
         val kind = when (installer.displayName.substringAfterLast('.', "").lowercase()) {
-            "exe" -> WindowsInstallerKind.EXE
+            "exe" -> {
+                if (installer.architectureLabel !in setOf("x86", "x86-64")) {
+                    statusMessage = "This Wine 11 x86-64 runtime can launch x86/x86-64 EXE files only. This file is " +
+                        installer.architectureLabel + "."
+                    return
+                }
+                WindowsInstallerKind.EXE
+            }
             "msi" -> WindowsInstallerKind.MSI
             else -> {
                 statusMessage = "ZIP files are archives. Extract them into the Capsule instead of installing them as EXE/MSI."
