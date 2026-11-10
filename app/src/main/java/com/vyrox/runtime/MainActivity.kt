@@ -887,7 +887,7 @@ class MainActivity : ComponentActivity() {
             statusMessage = "Installing WineHQ stable WoW64 inside this Capsule's Linux RootFS. This can download several hundred megabytes."
             var prepared: PreparedRootFsShell? = null
             try {
-                prepared = withContext(Dispatchers.IO) {
+                val preparedPlan = withContext(Dispatchers.IO) {
                     val directory = rootFsManager.getRootFsDirectory(
                         capsule.id,
                         LinuxRootFsArchitecture.ARM64
@@ -899,8 +899,9 @@ class MainActivity : ComponentActivity() {
                         fakeRoot = true
                     )
                 }
+                prepared = preparedPlan
                 val execution = runManagedRuntimeProcess(
-                    plan = prepared.plan,
+                    plan = preparedPlan.plan,
                     runId = "wine-install-" + System.currentTimeMillis(),
                     maxLogBytes = 8L * 1024L * 1024L,
                     timeoutMillis = 60L * 60L * 1000L,
