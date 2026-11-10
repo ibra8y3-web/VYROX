@@ -14,13 +14,18 @@ Termux package build files: https://github.com/termux/termux-packages/tree/maste
 
 `ProotCommandPlanner` builds a ProcessBuilder-ready argument vector and checks:
 
-- the PRoot binary is executable and stored below an approved app-private root;
+- the PRoot binary is executable, stored below an approved app-private root,
+  and verified as a 64-bit AArch64 ELF before a command plan can be created;
 - the RootFS is an approved image with VYROX metadata, a matching architecture tag, a valid archive digest, and a 64-bit little-endian AArch64 shell;
 - the guest command exists and is executable inside that RootFS;
 - the guest working directory exists;
 - bind sources are inside explicitly approved host roots;
 - guest paths are absolute and contain no traversal;
-- arguments are passed as separate vector elements rather than shell-concatenated.
+- arguments are passed as separate vector elements rather than shell-concatenated;
+- only a small guest environment allowlist is accepted; host library-injection
+  variables such as `LD_PRELOAD` and `LD_LIBRARY_PATH` are rejected;
+- the command plan constructor is internal to the runtime module, so application
+  code obtains plans from the validator rather than assembling arbitrary vectors.
 
 It does not start PRoot. The APK currently contains no PRoot binary.
 

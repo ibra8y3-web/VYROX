@@ -40,6 +40,9 @@ class ManagedRuntimeProcess internal constructor(
         )
     }
 
+    val isRunning: Boolean
+        get() = process.isAlive
+
     fun terminate() {
         terminateProcess()
         logThread.join(LOG_THREAD_JOIN_MILLIS)
@@ -133,7 +136,10 @@ class RuntimeProcessSupervisor(
             val process = ProcessBuilder(command)
                 .directory(workingDirectory)
                 .redirectErrorStream(true)
-                .apply { environment().putAll(plan.environment) }
+                .apply {
+                    environment().clear()
+                    environment().putAll(plan.environment)
+                }
                 .start()
 
             val truncated = AtomicBoolean(false)
