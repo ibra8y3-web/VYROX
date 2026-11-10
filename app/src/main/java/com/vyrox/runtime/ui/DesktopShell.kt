@@ -1,11 +1,11 @@
 package com.vyrox.runtime.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,50 +25,36 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.vyrox.engine.LinuxRootFsInfo
+import com.vyrox.engine.WinePrefixInfo
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
 
-private enum class DesktopPanel(val title: String, val shortName: String) {
-    OVERVIEW("Workspace", "Home"),
-    CAPSULES("Capsule Manager", "Capsules"),
-    FILES("VYROX File Explorer", "Files"),
-    INSTALLERS("Installer Library", "Installers"),
-    RUNTIME("Runtime & Device", "Runtime")
-}
-
-private class DesktopWindowState(
-    val panel: DesktopPanel,
-    x: Float,
-    y: Float
-) {
-    var x by mutableStateOf(x)
-    var y by mutableStateOf(y)
-    var width by mutableStateOf(720f)
-    var height by mutableStateOf(500f)
-    var minimized by mutableStateOf(false)
-    var maximized by mutableStateOf(false)
+private enum class DesktopPanel(val title: String, val shortName: String, val glyph: String) {
+    OVERVIEW("Workspace", "Home", "⌂"),
+    CAPSULES("Capsule Manager", "Capsules", "▦"),
+    FILES("VYROX File Explorer", "Files", "▤"),
+    INSTALLERS("Installer Library", "Installers", "⇧"),
+    RUNTIME("Runtime & Device", "Runtime", "◈")
 }
 
 @Composable
@@ -127,128 +112,146 @@ internal fun DesktopShell(
     onManageCapsuleSnapshots: (CapsuleInfo) -> Unit,
     onBackupCapsule: (CapsuleInfo) -> Unit,
     onImportCapsuleBackup: () -> Unit,
-    onToggleDesktopMode: () -> Unit
+    onToggleDesktopMode: () -> Unit,
+    language: String,
+    onLanguageChange: (String) -> Unit
 ) {
-    val windows = remember {
-        mutableStateListOf(DesktopWindowState(DesktopPanel.OVERVIEW, 30f, 24f))
-    }
-    var startMenuOpen by remember { mutableStateOf(false) }
-
-    fun openPanel(panel: DesktopPanel) {
-        val existingIndex = windows.indexOfFirst { it.panel == panel }
-        if (existingIndex >= 0) {
-            val existing = windows.removeAt(existingIndex)
-            existing.minimized = false
-            windows.add(existing)
-        } else {
-            val offset = (windows.size * 26).toFloat()
-            windows.add(
-                DesktopWindowState(
-                    panel = panel,
-                    x = 30f + offset,
-                    y = 24f + offset
-                )
-            )
-        }
-        startMenuOpen = false
-    }
+    var selectedPanel by remember { mutableStateOf(DesktopPanel.OVERVIEW) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     MaterialTheme(colorScheme = MaterialTheme.colorScheme) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF080D18))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF09172B),
+                            Color(0xFF10294A),
+                            Color(0xFF171D3D),
+                            Color(0xFF090F20)
+                        )
+                    )
+                )
         ) {
-            activeRuntimeLabel?.let { label ->
-                ActiveRuntimeOperationCard(
-                    label = label,
-                    isStopping = isStoppingRuntimeProcess,
-                    onStop = onStopRuntimeProcess,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            Canvas(Modifier.fillMaxSize()) {
+                val firstCenter = Offset(size.width * 0.80f, size.height * 0.18f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF4D8DEB).copy(alpha = 0.30f), Color.Transparent),
+                        center = firstCenter,
+                        radius = size.width * 0.58f
+                    ),
+                    radius = size.width * 0.58f,
+                    center = firstCenter
                 )
+                val secondCenter = Offset(size.width * 0.12f, size.height * 0.88f)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF7A55C7).copy(alpha = 0.20f), Color.Transparent),
+                        center = secondCenter,
+                        radius = size.width * 0.48f
+                    ),
+                    radius = size.width * 0.48f,
+                    center = secondCenter
+                )
+                val stars = listOf(
+                    Offset(0.08f, 0.14f), Offset(0.22f, 0.32f), Offset(0.38f, 0.12f),
+                    Offset(0.57f, 0.22f), Offset(0.72f, 0.42f), Offset(0.90f, 0.34f),
+                    Offset(0.16f, 0.72f), Offset(0.47f, 0.82f), Offset(0.84f, 0.76f)
+                )
+                stars.forEachIndexed { index, point ->
+                    drawCircle(
+                        color = Color.White.copy(alpha = if (index % 3 == 0) 0.44f else 0.20f),
+                        radius = if (index % 3 == 0) 2.1f else 1.2f,
+                        center = Offset(size.width * point.x, size.height * point.y)
+                    )
+                }
             }
-            Row(
+
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .background(Color(0xFF111A2C))
-                    .padding(horizontal = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "VYROX",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        "A COMPLETE PC RUNTIME INSIDE ANDROID",
-                        color = Color(0xFF9CAAC4),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Text(
-                    "${capsules.size} CAPSULES  •  ${installers.size} IMPORTED",
-                    color = Color(0xFFB9C6DD),
-                    fontSize = 10.sp
-                )
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onToggleDesktopMode) {
-                    Text("Phone admin")
-                }
-            }
-
-            Row(modifier = Modifier.weight(1f)) {
-                Column(
+                Row(
                     modifier = Modifier
-                        .width(82.dp)
-                        .fillMaxHeight()
-                        .background(Color(0xFF10182A))
-                        .padding(horizontal = 7.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xB3162742))
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    DesktopLauncherButton("VX", "Home") { openPanel(DesktopPanel.OVERVIEW) }
-                    DesktopLauncherButton("C", "Capsules") { openPanel(DesktopPanel.CAPSULES) }
-                    DesktopLauncherButton("F", "Files") { openPanel(DesktopPanel.FILES) }
-                    DesktopLauncherButton("I", "Install") { openPanel(DesktopPanel.INSTALLERS) }
-                    DesktopLauncherButton("R", "Runtime") { openPanel(DesktopPanel.RUNTIME) }
-                    Spacer(Modifier.weight(1f))
-                    Text("ARM64", color = Color(0xFF78D8C2), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("LOCAL", color = Color(0xFF71819D), fontSize = 9.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(vxText("VYROX")), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 23.sp)
+                        Text(vxText(vxText("A desktop workspace inside Android"))), color = Color(0xFFB6C9E8), fontSize = 11.sp)
+                    }
+                    Text(
+                        vxText(vxText("Environments"))) + "  " + capsules.size + "   •   " +
+                            vxText(vxText("Imported files"))) + "  " + installers.size,
+                        color = Color(0xFFD5E2F7),
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = { settingsOpen = true }) {
+                        Text(vxText("⚙  ")) + vxText(vxText("Settings"))))
+                    }
                 }
 
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .background(Color(0xFF0B1424))
-                ) {
-                    val viewportWidth = maxWidth
-                    val viewportHeight = maxHeight
+                activeRuntimeLabel?.let { label ->
+                    ActiveRuntimeOperationCard(
+                        label = label,
+                        isStopping = isStoppingRuntimeProcess,
+                        onStop = onStopRuntimeProcess,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
-                    windows.forEachIndexed { index, window ->
-                        if (!window.minimized) {
-                            DesktopWindowFrame(
-                                window = window,
-                                viewportWidth = viewportWidth,
-                                viewportHeight = viewportHeight,
-                                zOrder = index.toFloat(),
-                                onActivate = {
-                                    val current = windows.indexOf(window)
-                                    if (current >= 0 && current != windows.lastIndex) {
-                                        windows.removeAt(current)
-                                        windows.add(window)
-                                    }
-                                },
-                                onMinimize = { window.minimized = true },
-                                onToggleMaximize = { window.maximized = !window.maximized },
-                                onClose = { windows.remove(window) }
+                if (!statusMessage.isNullOrBlank()) {
+                    Text(statusMessage, color = Color(0xFFFFD58D), style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (selectedPanel == DesktopPanel.OVERVIEW) {
+                        DesktopHomePanel(
+                            capsules = capsules,
+                            installers = installers,
+                            selectedCapsule = selectedCapsule,
+                            onOpenCapsule = {
+                                onOpenCapsule(it)
+                                selectedPanel = DesktopPanel.FILES
+                            },
+                            onOpenPanel = { selectedPanel = it },
+                            onImport = onImport
+                        )
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = Color(0xD9142036),
+                            shape = RoundedCornerShape(22.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        vxText(selectedPanel.title),
+                                        modifier = Modifier.weight(1f),
+                                        color = Color.White,
+                                        fontSize = 21.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    OutlinedButton(onClick = { selectedPanel = DesktopPanel.OVERVIEW }) {
+                                        Text(vxText(vxText("Desktop"))))
+                                    }
+                                }
                                 DesktopPanelContent(
-                                    panel = window.panel,
+                                    panel = selectedPanel,
                                     installers = installers,
                                     capsules = capsules,
                                     selectedCapsule = selectedCapsule,
@@ -299,207 +302,221 @@ internal fun DesktopShell(
                                     onManageCapsuleSnapshots = onManageCapsuleSnapshots,
                                     onBackupCapsule = onBackupCapsule,
                                     onImportCapsuleBackup = onImportCapsuleBackup,
-                                    onOpenPanel = ::openPanel
+                                    onOpenPanel = { selectedPanel = it }
                                 )
                             }
                         }
                     }
+                }
 
-                    if (startMenuOpen) {
-                        Card(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(12.dp)
-                                .width(250.dp)
-                                .zIndex(100f),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF17233A)),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text("VYROX Start", fontWeight = FontWeight.Bold, color = Color.White)
-                                DesktopMenuItem("Workspace") { openPanel(DesktopPanel.OVERVIEW) }
-                                DesktopMenuItem("Capsule Manager") { openPanel(DesktopPanel.CAPSULES) }
-                                DesktopMenuItem("File Explorer") { openPanel(DesktopPanel.FILES) }
-                                DesktopMenuItem("Installer Library") { openPanel(DesktopPanel.INSTALLERS) }
-                                DesktopMenuItem("Runtime & Device") { openPanel(DesktopPanel.RUNTIME) }
-                            }
-                        }
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xB3162742))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DesktopDockButton("⌂", "Home") { selectedPanel = DesktopPanel.OVERVIEW }
+                    DesktopDockButton("▦", "Capsules") { selectedPanel = DesktopPanel.CAPSULES }
+                    DesktopDockButton("▤", "Files") { selectedPanel = DesktopPanel.FILES }
+                    DesktopDockButton("⇧", "Installers") { selectedPanel = DesktopPanel.INSTALLERS }
+                    DesktopDockButton("◈", "Runtime") { selectedPanel = DesktopPanel.RUNTIME }
+                    DesktopDockButton("⚙", "Settings") { settingsOpen = true }
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .background(Color(0xFF10182A))
-                    .padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                Button(onClick = { startMenuOpen = !startMenuOpen }) {
-                    Text("VYROX")
-                }
-                windows.forEach { window ->
-                    OutlinedButton(
-                        onClick = {
-                            if (window.minimized) window.minimized = false
-                            val index = windows.indexOf(window)
-                            if (index >= 0 && index != windows.lastIndex) {
-                                windows.removeAt(index)
-                                windows.add(window)
-                            }
-                        },
-                        enabled = true
+            if (settingsOpen) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.38f))
+                        .clickable { settingsOpen = false }
+                )
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(340.dp)
+                        .padding(12.dp)
+                        .zIndex(2f),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF172740)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(window.panel.shortName)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(vxText(vxText("Settings"))), modifier = Modifier.weight(1f), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            OutlinedButton(onClick = { settingsOpen = false }) { Text(vxText(vxText("Close")))) }
+                        }
+                        Text(vxText(vxText("Workspace and files"))), color = Color(0xFF8EABD4), fontWeight = FontWeight.SemiBold)
+                        SettingsEntry("▦", "Capsule Manager", "Create, open, clone and back up environments") {
+                            selectedPanel = DesktopPanel.CAPSULES
+                            settingsOpen = false
+                        }
+                        SettingsEntry("▤", "File Explorer", "Manage each environment's C: and D: files") {
+                            selectedPanel = DesktopPanel.FILES
+                            settingsOpen = false
+                        }
+                        SettingsEntry("⇧", "Installer Library", "Import and inspect EXE, MSI and ZIP files") {
+                            selectedPanel = DesktopPanel.INSTALLERS
+                            settingsOpen = false
+                        }
+                        Text(vxText(vxText("Runtime and device"))), color = Color(0xFF8EABD4), fontWeight = FontWeight.SemiBold)
+                        SettingsEntry("◈", "Linux and Box64", "Manage RootFS, test PRoot and build Box64") {
+                            selectedPanel = DesktopPanel.RUNTIME
+                            settingsOpen = false
+                        }
+                        Text(vxText(vxText("Language"))), color = Color(0xFF8EABD4), fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onLanguageChange("ar") }, enabled = language != "ar", modifier = Modifier.weight(1f)) {
+                                Text(vxText("العربية")))
+                            }
+                            OutlinedButton(onClick = { onLanguageChange("en") }, enabled = language != "en", modifier = Modifier.weight(1f)) {
+                                Text(vxText("English")))
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                settingsOpen = false
+                                onToggleDesktopMode()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(vxText(vxText("Switch orientation"))))
+                        }
+                        Text(
+                            vxText(vxText("Windows execution remains disabled until Wine and its per-environment prefix are verified."))),
+                            color = Color(0xFFB6C9E8),
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    statusMessage ?: "Private workspace  •  Runtime not yet device-verified",
-                    color = Color(0xFF9DACC4),
-                    fontSize = 10.sp,
-                    maxLines = 1
-                )
             }
         }
     }
 }
 
 @Composable
-private fun DesktopLauncherButton(
-    symbol: String,
-    label: String,
-    onClick: () -> Unit
+private fun DesktopHomePanel(
+    capsules: List<CapsuleInfo>,
+    installers: List<ImportedInstaller>,
+    selectedCapsule: CapsuleInfo?,
+    onOpenCapsule: (CapsuleInfo) -> Unit,
+    onOpenPanel: (DesktopPanel) -> Unit,
+    onImport: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF18253D))
-            .clickable(onClick = onClick)
-            .padding(vertical = 9.dp, horizontal = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(symbol, color = Color(0xFF91A9FF), fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-        Text(label, color = Color(0xFFD5DDF0), fontSize = 9.sp, maxLines = 1)
-    }
-}
-
-@Composable
-private fun DesktopMenuItem(label: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Text(label, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
-private fun DesktopWindowFrame(
-    window: DesktopWindowState,
-    viewportWidth: Dp,
-    viewportHeight: Dp,
-    zOrder: Float,
-    onActivate: () -> Unit,
-    onMinimize: () -> Unit,
-    onToggleMaximize: () -> Unit,
-    onClose: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    val density = LocalDensity.current
-    val minWidth = minOf(360.dp, viewportWidth)
-    val minHeight = minOf(250.dp, viewportHeight)
-    val width = if (window.maximized) viewportWidth else window.width.dp.coerceIn(minWidth, viewportWidth)
-    val height = if (window.maximized) viewportHeight else window.height.dp.coerceIn(minHeight, viewportHeight)
-    val x = if (window.maximized) 0.dp else window.x.dp.coerceIn(0.dp, (viewportWidth - width).coerceAtLeast(0.dp))
-    val y = if (window.maximized) 0.dp else window.y.dp.coerceIn(0.dp, (viewportHeight - height).coerceAtLeast(0.dp))
-
-    Card(
-        modifier = Modifier
-            .offset {
-                with(density) { IntOffset(x.roundToPx(), y.roundToPx()) }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(vxText(vxText("Your workspace"))), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text(vxText(vxText("A clean desktop for your Android-powered PC environment."))), color = Color(0xFFB6C9E8), fontSize = 13.sp)
             }
-            .size(width, height)
-            .zIndex(zOrder + if (window.maximized) 10f else 0f)
-            .clickable(onClick = onActivate),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF141F34)),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize()) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0x80304E79)), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text(vxText(vxText("Current environment"))), color = Color(0xFFB6C9E8), fontSize = 10.sp)
+                    Text(selectedCapsule?.name ?: vxText(vxText("Not selected"))), color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        Text(vxText(vxText("Desktop shortcuts"))), color = Color.White, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            DesktopShortcut("▦", "Capsules", "Environments") { onOpenPanel(DesktopPanel.CAPSULES) }
+            DesktopShortcut("▤", "Files", "C:  •  D:") { onOpenPanel(DesktopPanel.FILES) }
+            DesktopShortcut("⇧", "Installers", installers.size.toString() + " imported") { onOpenPanel(DesktopPanel.INSTALLERS) }
+            DesktopShortcut("◈", "Runtime", "Linux  •  Box64") { onOpenPanel(DesktopPanel.RUNTIME) }
+            capsules.forEach { capsule ->
+                DesktopShortcut("▣", capsule.name, "Open environment") { onOpenCapsule(capsule) }
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(vxText(vxText("Installed applications"))), color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(vxText(vxText("Windows programs will appear here after a real Wine installation succeeds."))), color = Color(0xFF9FB5D5), fontSize = 12.sp)
+            }
+            OutlinedButton(onClick = onImport) { Text(vxText(vxText("Import setup file")))) }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0x70203352)), shape = RoundedCornerShape(18.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp)
-                    .background(Color(0xFF202D47))
-                    .pointerInput(window.panel) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            if (!window.maximized) {
-                                val dx = with(density) { dragAmount.x.toDp().value }
-                                val dy = with(density) { dragAmount.y.toDp().value }
-                                window.x = (window.x + dx).coerceIn(
-                                    0f,
-                                    (viewportWidth - width).value.coerceAtLeast(0f)
-                                )
-                                window.y = (window.y + dy).coerceIn(
-                                    0f,
-                                    (viewportHeight - height).value.coerceAtLeast(0f)
-                                )
-                            }
-                            onActivate()
-                        }
-                    }
-                    .padding(start = 14.dp, end = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    window.panel.title,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedButton(onClick = onMinimize) { Text("—") }
-                OutlinedButton(onClick = onToggleMaximize) { Text(if (window.maximized) "❐" else "□") }
-                OutlinedButton(onClick = onClose) { Text("×") }
+                Text(vxText("＋")), color = Color(0xFF9CB8FF), fontSize = 30.sp, fontWeight = FontWeight.Light)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(vxText(vxText("No Windows apps installed yet"))), color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        vxText(vxText("Imported EXE and MSI files are setup files only. They are not displayed as installed apps until Wine installation is connected and verified."))),
+                        color = Color(0xFFB6C9E8),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-            ) {
-                content()
+        }
+        if (capsules.isEmpty()) {
+            OutlinedButton(onClick = { onOpenPanel(DesktopPanel.CAPSULES) }) {
+                Text(vxText(vxText("Create your first environment"))))
             }
-            }
-            if (!window.maximized) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                    .size(22.dp)
-                    .clip(RoundedCornerShape(bottomEnd = 16.dp))
-                    .background(Color(0xFF31476B))
-                    .pointerInput(window.panel, viewportWidth, viewportHeight) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val dx = with(density) { dragAmount.x.toDp().value }
-                            val dy = with(density) { dragAmount.y.toDp().value }
-                            window.width = (width.value + dx).coerceIn(
-                                minWidth.value,
-                                viewportWidth.value
-                            )
-                            window.height = (height.value + dy).coerceIn(
-                                minHeight.value,
-                                viewportHeight.value
-                            )
-                        }
-                    }
-                )
-            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopShortcut(glyph: String, title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.width(112.dp).clip(RoundedCornerShape(18.dp)).background(Color(0x80304A70))
+            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 13.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(16.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF5F8DE0), Color(0xFF6E65C8)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(glyph, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+        Text(subtitle, color = Color(0xFFB9CBE5), fontSize = 9.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DesktopDockButton(glyph: String, label: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Text(glyph, color = Color(0xFF9EB9FF), fontSize = 20.sp)
+        Text(vxText(label), color = Color(0xFFE0E9F8), fontSize = 9.sp)
+    }
+}
+
+@Composable
+private fun SettingsEntry(glyph: String, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFF223753))
+            .clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(glyph, color = Color(0xFF9EB9FF), fontSize = 21.sp)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(vxText(title), color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(vxText(subtitle), color = Color(0xFFB6C9E8), fontSize = 11.sp)
         }
     }
 }
@@ -517,6 +534,8 @@ private fun DesktopPanelContent(
     rootFsImages: List<LinuxRootFsInfo>,
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
+    winePrefixInfo: WinePrefixInfo?,
+    onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
     isImporting: Boolean,
     statusMessage: String?,
     capsuleName: String,
@@ -570,7 +589,7 @@ private fun DesktopPanelContent(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text("Your PC. Your Phone. Your Environment.", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(vxText("Your PC. Your Phone. Your Environment.")), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
                             "A managed Android workspace designed for future Windows compatibility. Imported Windows files are stored privately and are not executed yet.",
                             color = Color(0xFFB5C3DA)
@@ -587,7 +606,7 @@ private fun DesktopPanelContent(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Capsule workspaces", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(vxText("Capsule workspaces")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
                             "Each Capsule has separate app-private files and virtual C:/D: folder layouts. This is logical file separation, not a virtual machine or a hardened security boundary.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
@@ -597,26 +616,26 @@ private fun DesktopPanelContent(
                             onValueChange = onCapsuleNameChange,
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text("New Capsule name") }
+                            label = { Text(vxText("New Capsule name"))) }
                         )
                         Button(
                             onClick = onCreateCapsule,
                             enabled = capsuleName.trim().length >= 2,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Create Capsule")
+                            Text(vxText("Create Capsule")))
                         }
                         OutlinedButton(
                             onClick = onImportCapsuleBackup,
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isImporting
                         ) {
-                            Text("Import Capsule backup")
+                            Text(vxText("Import Capsule backup")))
                         }
                     }
                 }
                 if (capsules.isEmpty()) {
-                    Text("No Capsule workspaces created yet.", color = Color(0xFFACB9D0))
+                    Text(vxText("No Capsule workspaces created yet.")), color = Color(0xFFACB9D0))
                 } else {
                     capsules.forEach { capsule ->
                         CapsuleRow(
@@ -637,10 +656,10 @@ private fun DesktopPanelContent(
                 if (selectedCapsule == null) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Select a Capsule first", fontWeight = FontWeight.Bold)
-                            Text("The file explorer reads and changes the app-private C: and D: workspace folders. Open a Capsule to browse its files.")
+                            Text(vxText("Select a Capsule first")), fontWeight = FontWeight.Bold)
+                            Text(vxText("The file explorer reads and changes the app-private C: and D: workspace folders. Open a Capsule to browse its files.")))
                             Button(onClick = { onOpenPanel(DesktopPanel.CAPSULES) }) {
-                                Text("Open Capsule Manager")
+                                Text(vxText("Open Capsule Manager")))
                             }
                         }
                     }
@@ -688,18 +707,18 @@ private fun DesktopPanelContent(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("VYROX Installer Library", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(vxText("VYROX Installer Library")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
                             "Importing stores an EXE/MSI in private app storage. It does not install or run Windows software until a compatible runtime is integrated.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
                         Button(onClick = onImport, enabled = !isImporting) {
-                            Text(if (isImporting) "Importing..." else "Import EXE / MSI / ZIP")
+                            Text(if (isImporting) vxText("Importing...") else vxText("Import EXE / MSI / ZIP"))
                         }
                     }
                 }
                 if (installers.isEmpty()) {
-                    Text("No imported installers.", color = Color(0xFFACB9D0))
+                    Text(vxText("No imported installers.")), color = Color(0xFFACB9D0))
                 } else {
                     installers.forEach { installer ->
                         InstallerRow(installer = installer, onDelete = onDeleteInstaller)

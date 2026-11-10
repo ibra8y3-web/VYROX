@@ -22,6 +22,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +50,111 @@ import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.LinuxRootFsArchitecture
 import com.vyrox.engine.WinePrefixInfo
 import java.util.Locale
+
+private val VyroxArabicText = mapOf(
+    "Each Capsule has separate app-private files and virtual C:/D: folder layouts. This is logical file separation, not a virtual machine or a hardened security boundary." to "لكل بيئة ملفات خاصة ومجلدات C:/D: منفصلة منطقيًا. هذا فصل للملفات وليس جهازًا افتراضيًا أو حاجزًا أمنيًا معزولًا.",
+    "Imported EXE and MSI files are setup files only. They are not displayed as installed apps until Wine installation is connected and verified." to "ملفات EXE وMSI المستوردة هي ملفات تثبيت فقط، ولن تظهر كتطبيقات مثبتة قبل ربط Wine والتحقق من نجاح التثبيت.",
+    "A managed Android workspace designed for future Windows compatibility. Imported Windows files are stored privately and are not executed yet." to "مساحة عمل على أندرويد مجهزة لتوافق Windows. تُحفظ ملفات Windows المستوردة بشكل خاص ولا يتم تشغيلها حاليًا.",
+    "Importing stores an EXE/MSI in private app storage. It does not install or run Windows software until a compatible runtime is integrated." to "الاستيراد يحفظ ملف EXE أو MSI داخل مساحة التطبيق الخاصة. لا يعني ذلك تثبيت برنامج Windows أو تشغيله قبل دمج محرك متوافق.",
+    "The file explorer reads and changes the app-private C: and D: workspace folders. Open a Capsule to browse its files." to "يعرض مستكشف الملفات مجلدات C: وD: الخاصة بالبيئة ويتيح إدارتها. افتح بيئة لتصفح ملفاتها.",
+    "Windows execution remains disabled until Wine and its per-environment prefix are verified." to "سيظل تشغيل Windows معطلًا حتى يتم التحقق من Wine وبيئة التشغيل الخاصة بكل مساحة.",
+    "Windows programs will appear here after a real Wine installation succeeds." to "ستظهر برامج Windows هنا بعد نجاح تثبيت Wine فعليًا.",
+    "A clean desktop for your Android-powered PC environment." to "سطح مكتب منظم لبيئة الكمبيوتر على أندرويد.",
+    "Copy / move destination path (blank = drive root)" to "مسار النسخ أو النقل (فارغ = جذر القرص)",
+    "No snapshots have been created for this Capsule." to "لم يتم إنشاء لقطات لهذه البيئة.",
+    "Create, open, clone and back up environments" to "إنشاء البيئات وفتحها ونسخها احتياطيًا",
+    "Manage each environment's C: and D: files" to "إدارة ملفات C: وD: لكل بيئة",
+    "Import and inspect EXE, MSI and ZIP files" to "استيراد وفحص ملفات EXE وMSI وZIP",
+    "Manage RootFS, test PRoot and build Box64" to "إدارة RootFS واختبار PRoot وبناء Box64",
+    "GPU / DirectX translation: not integrated" to "ترجمة الرسوميات وDirectX: لم يتم دمجها بعد",
+    "Windows runtime environment for Android" to "بيئة تشغيل Windows على أندرويد",
+    "Your PC. Your Phone. Your Environment." to "كمبيوترك وبيئتك في هاتفك.",
+    "A desktop workspace inside Android" to "سطح مكتب متكامل داخل أندرويد",
+    "No Capsule workspaces created yet." to "لم يتم إنشاء أي بيئة بعد.",
+    "Wine compatibility: not integrated" to "توافق Wine: لم يتم دمجه بعد",
+    "CPU translation: not integrated" to "ترجمة المعالج: لم يتم دمجها بعد",
+    "No Windows apps installed yet" to "لا توجد تطبيقات Windows مثبتة حتى الآن",
+    "Create your first environment" to "أنشئ أول بيئة لك",
+    "Import Linux RootFS archive" to "استيراد ملف نظام لينكس",
+    "Switch to desktop workspace" to "العودة إلى سطح المكتب",
+    "Active runtime operation" to "عملية تشغيل نشطة",
+    "VYROX Installer Library" to "مكتبة التثبيت في VYROX",
+    "No imported installers." to "لا توجد ملفات تثبيت مستوردة.",
+    "Installed applications" to "التطبيقات المثبتة",
+    "Select a Capsule first" to "اختر بيئة أولًا",
+    "Import EXE / MSI / ZIP" to "استيراد EXE أو MSI أو ZIP",
+    "Import Capsule backup" to "استيراد نسخة احتياطية لبيئة",
+    "This folder is empty." to "هذا المجلد فارغ.",
+    "Open Capsule Manager" to "فتح مدير البيئات",
+    "Runtime engine stack" to "مكونات محرك التشغيل",
+    "Workspace and files" to "مساحة العمل والملفات",
+    "Current environment" to "البيئة الحالية",
+    "Importing RootFS..." to "جارٍ استيراد نظام لينكس...",
+    "Check Wine packages" to "فحص حزم Wine",
+    "Runtime and device" to "المحرك والجهاز",
+    "Switch orientation" to "تغيير اتجاه الشاشة",
+    "Capsule workspaces" to "مساحات البيئات",
+    "Desktop shortcuts" to "اختصارات سطح المكتب",
+    "Import setup file" to "استيراد ملف تثبيت",
+    "Build Box64 0.4.4" to "بناء Box64 0.4.4",
+    "Search this drive" to "البحث في هذا القرص",
+    "Open environment" to "فتح البيئة",
+    "New Capsule name" to "اسم البيئة الجديدة",
+    "Device readiness" to "جاهزية الجهاز",
+    "Manage snapshots" to "إدارة اللقطات",
+    "Foundation build" to "البناء الأساسي",
+    "Supported ABIs: " to "معماريات الجهاز: ",
+    "Linux and Box64" to "لينكس وBox64",
+    "Runtime engines" to "محركات التشغيل",
+    "New folder name" to "اسم المجلد الجديد",
+    "Imported files" to "ملفات مستوردة",
+    "Your workspace" to "مساحة عملك",
+    "Create Capsule" to "إنشاء بيئة",
+    "Rename Capsule" to "إعادة تسمية البيئة",
+    "Search results" to "نتائج البحث",
+    "File Explorer" to "مستكشف الملفات",
+    "Create folder" to "إنشاء مجلد",
+    "Rebuild Box64" to "إعادة بناء Box64",
+    "Environments" to "البيئات",
+    "Not selected" to "غير محددة",
+    "Importing..." to "جارٍ الاستيراد...",
+    "Linux RootFS" to "نظام ملفات لينكس",
+    "Snapshots — " to "اللقطات — ",
+    "Capsule name" to "اسم البيئة",
+    "Import file" to "استيراد ملف",
+    "Extract ZIP" to "فك ضغط ZIP",
+    "Test shell" to "اختبار الطرفية",
+    "Stopping…" to "جارٍ الإيقاف…",
+    "C: System" to "C: النظام",
+    "Settings" to "الإعدادات",
+    "Language" to "اللغة",
+    "New name" to "الاسم الجديد",
+    "Snapshot" to "لقطة",
+    "Desktop" to "سطح المكتب",
+    "Restore" to "استعادة",
+    "D: Data" to "D: البيانات",
+    "Delete" to "حذف",
+    "Cancel" to "إلغاء",
+    "Remove" to "إزالة",
+    "Search" to "بحث",
+    "Locate" to "تحديد الموقع",
+    "Rename" to "إعادة تسمية",
+    "Backup" to "نسخ احتياطي",
+    "Close" to "إغلاق",
+    "Clone" to "استنساخ",
+    "Save" to "حفظ",
+    "Stop" to "إيقاف",
+    "Open" to "فتح",
+    "Copy" to "نسخ",
+    "Move" to "نقل",
+    "Up" to "للأعلى"
+)
+
+private val LocalVyroxLanguage = androidx.compose.runtime.compositionLocalOf { "en" }
+
+@Composable
+internal fun vxText(value: String): String =
+    if (LocalVyroxLanguage.current == "ar") VyroxArabicText[value] ?: value else value
 
 private val VyroxColors = darkColorScheme(
     primary = Color(0xFF91A9FF),
@@ -78,6 +187,8 @@ fun VyroxApp(
     onStopRuntimeProcess: () -> Unit,
     statusMessage: String?,
     isDesktopMode: Boolean,
+    language: String,
+    onLanguageChange: (String) -> Unit,
     onToggleDesktopMode: () -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
@@ -123,6 +234,10 @@ fun VyroxApp(
     var destinationPath by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
     var searchQuery by remember(selectedCapsule?.id, selectedDrive) { mutableStateOf("") }
 
+    CompositionLocalProvider(
+        LocalVyroxLanguage provides language,
+        LocalLayoutDirection provides if (language == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
+    ) {
     MaterialTheme(colorScheme = VyroxColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -195,7 +310,9 @@ fun VyroxApp(
                     onManageCapsuleSnapshots = onManageCapsuleSnapshots,
                     onBackupCapsule = onBackupCapsule,
                     onImportCapsuleBackup = onImportCapsuleBackup,
-                    onToggleDesktopMode = onToggleDesktopMode
+                    onToggleDesktopMode = onToggleDesktopMode,
+                    language = language,
+                    onLanguageChange = onLanguageChange
                 )
             } else {
             Column(
@@ -207,17 +324,17 @@ fun VyroxApp(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
-                        text = "VYROX",
+                        text = vxText("VYROX"),
                         fontSize = 32.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Windows runtime environment for Android",
+                        text = vxText("Windows runtime environment for Android"),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                     )
                     OutlinedButton(onClick = onToggleDesktopMode) {
-                        Text("Switch to desktop workspace")
+                        Text(vxText("Switch to desktop workspace")))
                     }
                 }
 
@@ -241,7 +358,7 @@ fun VyroxApp(
                         modifier = Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Capsule workspaces", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(vxText("Capsule workspaces")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
                             "Create separate private storage workspaces. These folders are not virtual machines or hardened security sandboxes.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
@@ -251,7 +368,7 @@ fun VyroxApp(
                             onValueChange = { capsuleName = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text("Capsule name") }
+                            label = { Text(vxText("Capsule name"))) }
                         )
                         Button(
                             onClick = {
@@ -261,14 +378,14 @@ fun VyroxApp(
                             enabled = capsuleName.trim().length >= 2,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Create Capsule")
+                            Text(vxText("Create Capsule")))
                         }
                         OutlinedButton(
                             onClick = onImportCapsuleBackup,
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isImporting
                         ) {
-                            Text("Import Capsule backup")
+                            Text(vxText("Import Capsule backup")))
                         }
                         if (capsules.isEmpty()) {
                             Text(
@@ -349,7 +466,7 @@ fun VyroxApp(
                         modifier = Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Foundation build", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(vxText("Foundation build")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
                             "Imports EXE/MSI installers and ZIP archives into private app storage. ZIP extraction is confined to a selected Capsule; Windows executables are not run yet.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
@@ -365,9 +482,9 @@ fun VyroxApp(
                                     strokeWidth = 2.dp,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
-                                Text("  Importing...")
+                                Text(vxText("  Importing...")))
                             } else {
-                                Text("Import EXE / MSI / ZIP")
+                                Text(vxText("Import EXE / MSI / ZIP")))
                             }
                         }
                     }
@@ -386,7 +503,7 @@ fun VyroxApp(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Imported installers",
+                        text = vxText("Imported installers"),
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
@@ -404,7 +521,7 @@ fun VyroxApp(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Text(
-                            text = "No installers imported. Choose an EXE or MSI file to add it to this device's private VYROX storage.",
+                            text = vxText("No installers imported. Choose an EXE or MSI file to add it to this device's private VYROX storage."),
                             modifier = Modifier.padding(18.dp),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
@@ -426,10 +543,10 @@ fun VyroxApp(
                         modifier = Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
-                        Text("Runtime engines", fontWeight = FontWeight.Bold)
-                        Text("Wine compatibility: not integrated")
-                        Text("CPU translation: not integrated")
-                        Text("GPU / DirectX translation: not integrated")
+                        Text(vxText("Runtime engines")), fontWeight = FontWeight.Bold)
+                        Text(vxText("Wine compatibility: not integrated")))
+                        Text(vxText("CPU translation: not integrated")))
+                        Text(vxText("GPU / DirectX translation: not integrated")))
                         Text(
                             "Capsule isolation and Windows process execution are future milestones.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
@@ -447,10 +564,10 @@ fun VyroxApp(
         val capsule = snapshotCapsule
         AlertDialog(
             onDismissRequest = onCloseCapsuleSnapshotManager,
-            title = { Text("Snapshots — " + capsule.name) },
+            title = { Text(vxText("Snapshots — ")) + capsule.name) },
             text = {
                 if (capsuleSnapshots.isEmpty()) {
-                    Text("No snapshots have been created for this Capsule.")
+                    Text(vxText("No snapshots have been created for this Capsule.")))
                 } else {
                     Column(
                         modifier = Modifier
@@ -479,13 +596,13 @@ fun VyroxApp(
                                                 onRestoreCapsuleSnapshot(capsule, snapshot)
                                             },
                                             enabled = !isImporting
-                                        ) { Text("Restore") }
+                                        ) { Text(vxText("Restore"))) }
                                         OutlinedButton(
                                             onClick = {
                                                 onDeleteCapsuleSnapshot(capsule, snapshot)
                                             },
                                             enabled = capsule != null && !isImporting
-                                        ) { Text("Delete") }
+                                        ) { Text(vxText("Delete"))) }
                                     }
                                 }
                             }
@@ -494,7 +611,7 @@ fun VyroxApp(
                 }
             },
             confirmButton = {
-                OutlinedButton(onClick = onCloseCapsuleSnapshotManager) { Text("Close") }
+                OutlinedButton(onClick = onCloseCapsuleSnapshotManager) { Text(vxText("Close"))) }
             }
         )
     }
@@ -503,13 +620,13 @@ fun VyroxApp(
         val capsule = pendingRenameCapsule
         AlertDialog(
             onDismissRequest = { pendingRenameCapsule = null },
-            title = { Text("Rename Capsule") },
+            title = { Text(vxText("Rename Capsule"))) },
             text = {
                 OutlinedTextField(
                     value = capsuleRenameValue,
                     onValueChange = { capsuleRenameValue = it },
                     singleLine = true,
-                    label = { Text("New Capsule name") }
+                    label = { Text(vxText("New Capsule name"))) }
                 )
             },
             confirmButton = {
@@ -519,10 +636,10 @@ fun VyroxApp(
                         pendingRenameCapsule = null
                     },
                     enabled = capsuleRenameValue.trim().length >= 2
-                ) { Text("Save") }
+                ) { Text(vxText("Save"))) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { pendingRenameCapsule = null }) { Text("Cancel") }
+                OutlinedButton(onClick = { pendingRenameCapsule = null }) { Text(vxText("Cancel"))) }
             }
         )
     }
@@ -531,13 +648,13 @@ fun VyroxApp(
         val entry = pendingRenameEntry
         AlertDialog(
             onDismissRequest = { pendingRenameEntry = null },
-            title = { Text("Rename ${entry?.name}") },
+            title = { Text(vxText("Rename") + " " + (entry?.name ?: ""))) },
             text = {
                 OutlinedTextField(
                     value = renameValue,
                     onValueChange = { renameValue = it },
                     singleLine = true,
-                    label = { Text("New name") }
+                    label = { Text(vxText("New name"))) }
                 )
             },
             confirmButton = {
@@ -548,12 +665,12 @@ fun VyroxApp(
                     },
                     enabled = renameValue.trim().isNotEmpty()
                 ) {
-                    Text("Save")
+                    Text(vxText("Save")))
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { pendingRenameEntry = null }) {
-                    Text("Cancel")
+                    Text(vxText("Cancel")))
                 }
             }
         )
@@ -563,7 +680,7 @@ fun VyroxApp(
         val entry = pendingDeleteEntry
         AlertDialog(
             onDismissRequest = { pendingDeleteEntry = null },
-            title = { Text("Remove ${entry?.name}?") },
+            title = { Text(vxText("Remove") + " " + (entry?.name ?: "") + "?")) },
             text = {
                 Text(
                     if (entry?.isDirectory == true) {
@@ -580,15 +697,16 @@ fun VyroxApp(
                         pendingDeleteEntry = null
                     }
                 ) {
-                    Text("Delete")
+                    Text(vxText("Delete")))
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { pendingDeleteEntry = null }) {
-                    Text("Cancel")
+                    Text(vxText("Cancel")))
                 }
             }
         )
+    }
     }
 }
 
@@ -614,14 +732,14 @@ internal fun ActiveRuntimeOperationCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Active runtime operation", fontWeight = FontWeight.SemiBold)
+                Text(vxText("Active runtime operation")), fontWeight = FontWeight.SemiBold)
                 Text(label, style = MaterialTheme.typography.bodySmall)
             }
             OutlinedButton(
                 onClick = onStop,
                 enabled = !isStopping
             ) {
-                Text(if (isStopping) "Stopping…" else "Stop")
+                Text(if (isStopping) vxText("Stopping…") else vxText("Stop"))
             }
         }
     }
@@ -665,7 +783,7 @@ internal fun RuntimeEngineStatusCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text("Runtime engine stack", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(vxText("Runtime engine stack")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
                 "Box64 0.4.4 in selected ARM64 RootFS: " +
                     if (box64Installed) "built and x86-64 syscall smoke-tested (full applications remain unverified)" else "not installed",
@@ -733,8 +851,8 @@ internal fun HostReadinessCard(profile: HostCapabilities) {
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text("Device readiness", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Supported ABIs: " + profile.supportedAbis.joinToString().ifBlank { "Unknown" })
+            Text(vxText("Device readiness")), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(vxText("Supported ABIs: ")) + profile.supportedAbis.joinToString().ifBlank { "Unknown" })
             Text(
                 "CPU cores: ${profile.logicalCpuCount} • RAM: ${formatBytes(profile.totalMemoryBytes)}",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
@@ -825,19 +943,19 @@ internal fun CapsuleExplorerCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                OutlinedButton(onClick = onClose) { Text("Close") }
+                OutlinedButton(onClick = onClose) { Text(vxText("Close"))) }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (selectedDrive == 'C') {
-                    Button(onClick = { onSelectDrive('C') }) { Text("C: System") }
+                    Button(onClick = { onSelectDrive('C') }) { Text(vxText("C: System"))) }
                 } else {
-                    OutlinedButton(onClick = { onSelectDrive('C') }) { Text("C: System") }
+                    OutlinedButton(onClick = { onSelectDrive('C') }) { Text(vxText("C: System"))) }
                 }
                 if (selectedDrive == 'D') {
-                    Button(onClick = { onSelectDrive('D') }) { Text("D: Data") }
+                    Button(onClick = { onSelectDrive('D') }) { Text(vxText("D: Data"))) }
                 } else {
-                    OutlinedButton(onClick = { onSelectDrive('D') }) { Text("D: Data") }
+                    OutlinedButton(onClick = { onSelectDrive('D') }) { Text(vxText("D: Data"))) }
                 }
             }
 
@@ -858,20 +976,20 @@ internal fun CapsuleExplorerCard(
                 onValueChange = onFolderNameChange,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("New folder name") }
+                label = { Text(vxText("New folder name"))) }
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onCreateFolder, enabled = folderName.trim().isNotEmpty()) {
-                    Text("Create folder")
+                    Text(vxText("Create folder")))
                 }
                 OutlinedButton(onClick = onImportFile, enabled = !isImporting) {
-                    Text(if (isImporting) "Importing..." else "Import file")
+                    Text(if (isImporting) vxText("Importing...") else vxText("Import file"))
                 }
                 if (currentPath.isNotBlank()) {
                     OutlinedButton(
                         onClick = { onNavigate(currentPath.substringBeforeLast('/', "")) }
                     ) {
-                        Text("Up")
+                        Text(vxText("Up")))
                     }
                 }
             }
@@ -885,7 +1003,7 @@ internal fun CapsuleExplorerCard(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Linux RootFS", fontWeight = FontWeight.SemiBold)
+                    Text(vxText("Linux RootFS")), fontWeight = FontWeight.SemiBold)
                     Text(
                         "Wine prefix: " + (winePrefixInfo?.let { "verified Wine ${it.wineVersion} (${it.architecture})" }
                             ?: "no verified prefix in this Capsule's ARM64 RootFS"),
@@ -906,7 +1024,7 @@ internal fun CapsuleExplorerCard(
                         style = MaterialTheme.typography.bodySmall
                     )
                     Button(onClick = onImportRootFs, enabled = !isImporting) {
-                        Text(if (isImporting) "Importing RootFS..." else "Import Linux RootFS archive")
+                        Text(if (isImporting) vxText("Importing RootFS...") else vxText("Import Linux RootFS archive"))
                     }
                     if (rootFsImages.isEmpty()) {
                         Text(
@@ -945,14 +1063,14 @@ internal fun CapsuleExplorerCard(
                                             onClick = { onCheckWinePackages(rootFs) },
                                             enabled = !isImporting
                                         ) {
-                                            Text("Check Wine packages")
+                                            Text(vxText("Check Wine packages")))
                                         }
                                         OutlinedButton(
                                             modifier = Modifier.weight(1f),
                                             onClick = { onBuildBox64(rootFs) },
                                             enabled = !isImporting
                                         ) {
-                                            Text(if (box64Installed) "Rebuild Box64" else "Build Box64 0.4.4")
+                                            Text(if (box64Installed) vxText("Rebuild Box64") else vxText("Build Box64 0.4.4"))
                                         }
                                     }
                                     Row(
@@ -964,14 +1082,14 @@ internal fun CapsuleExplorerCard(
                                             onClick = { onTestRootFs(rootFs) },
                                             enabled = !isImporting
                                         ) {
-                                            Text("Test shell")
+                                            Text(vxText("Test shell")))
                                         }
                                         OutlinedButton(
                                             modifier = Modifier.weight(1f),
                                             onClick = { onRemoveRootFs(rootFs) },
                                             enabled = !isImporting
                                         ) {
-                                            Text("Remove")
+                                            Text(vxText("Remove")))
                                         }
                                     }
                                 } else {
@@ -980,7 +1098,7 @@ internal fun CapsuleExplorerCard(
                                         onClick = { onRemoveRootFs(rootFs) },
                                         enabled = !isImporting
                                     ) {
-                                        Text("Remove")
+                                        Text(vxText("Remove")))
                                     }
                                 }
                             }
@@ -995,7 +1113,7 @@ internal fun CapsuleExplorerCard(
                 onValueChange = onDestinationPathChange,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("Copy / move destination path (blank = drive root)") }
+                label = { Text(vxText("Copy / move destination path (blank = drive root)"))) }
             )
 
             Row(
@@ -1008,15 +1126,15 @@ internal fun CapsuleExplorerCard(
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    label = { Text("Search this drive") }
+                    label = { Text(vxText("Search this drive"))) }
                 )
                 Button(onClick = onSearch, enabled = searchQuery.trim().isNotEmpty()) {
-                    Text("Search")
+                    Text(vxText("Search")))
                 }
             }
 
             if (searchResults.isNotEmpty()) {
-                Text("Search results", fontWeight = FontWeight.SemiBold)
+                Text(vxText("Search results")), fontWeight = FontWeight.SemiBold)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     searchResults.forEach { result ->
                         Row(
@@ -1030,7 +1148,7 @@ internal fun CapsuleExplorerCard(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             OutlinedButton(onClick = { onSelectSearchResult(result) }) {
-                                Text("Locate")
+                                Text(vxText("Locate")))
                             }
                         }
                     }
@@ -1093,15 +1211,15 @@ private fun CapsuleFileRow(
                 )
             }
             if (entry.isDirectory) {
-                OutlinedButton(onClick = onOpen) { Text("Open") }
+                OutlinedButton(onClick = onOpen) { Text(vxText("Open"))) }
             }
-            OutlinedButton(onClick = onRename) { Text("Rename") }
-            OutlinedButton(onClick = onCopy) { Text("Copy") }
-            OutlinedButton(onClick = onMove) { Text("Move") }
+            OutlinedButton(onClick = onRename) { Text(vxText("Rename"))) }
+            OutlinedButton(onClick = onCopy) { Text(vxText("Copy"))) }
+            OutlinedButton(onClick = onMove) { Text(vxText("Move"))) }
             if (!entry.isDirectory && entry.name.endsWith(".zip", ignoreCase = true)) {
-                OutlinedButton(onClick = onExtractZip) { Text("Extract ZIP") }
+                OutlinedButton(onClick = onExtractZip) { Text(vxText("Extract ZIP"))) }
             }
-            OutlinedButton(onClick = onDelete) { Text("Remove") }
+            OutlinedButton(onClick = onDelete) { Text(vxText("Remove"))) }
         }
     }
 }
@@ -1139,23 +1257,23 @@ internal fun CapsuleRow(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                OutlinedButton(onClick = { onOpen(capsule) }) { Text("Open") }
-                OutlinedButton(onClick = { onDelete(capsule) }) { Text("Delete") }
+                OutlinedButton(onClick = { onOpen(capsule) }) { Text(vxText("Open"))) }
+                OutlinedButton(onClick = { onDelete(capsule) }) { Text(vxText("Delete"))) }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                OutlinedButton(onClick = { onClone(capsule) }, modifier = Modifier.weight(1f)) { Text("Clone") }
-                OutlinedButton(onClick = { onRename(capsule) }, modifier = Modifier.weight(1f)) { Text("Rename") }
-                OutlinedButton(onClick = { onBackup(capsule) }, modifier = Modifier.weight(1f)) { Text("Backup") }
+                OutlinedButton(onClick = { onClone(capsule) }, modifier = Modifier.weight(1f)) { Text(vxText("Clone"))) }
+                OutlinedButton(onClick = { onRename(capsule) }, modifier = Modifier.weight(1f)) { Text(vxText("Rename"))) }
+                OutlinedButton(onClick = { onBackup(capsule) }, modifier = Modifier.weight(1f)) { Text(vxText("Backup"))) }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                OutlinedButton(onClick = { onSnapshot(capsule) }, modifier = Modifier.weight(1f)) { Text("Snapshot") }
-                OutlinedButton(onClick = { onManageSnapshots(capsule) }, modifier = Modifier.weight(1f)) { Text("Manage snapshots") }
+                OutlinedButton(onClick = { onSnapshot(capsule) }, modifier = Modifier.weight(1f)) { Text(vxText("Snapshot"))) }
+                OutlinedButton(onClick = { onManageSnapshots(capsule) }, modifier = Modifier.weight(1f)) { Text(vxText("Manage snapshots"))) }
             }
         }
     }
@@ -1193,7 +1311,7 @@ internal fun InstallerRow(
                 )
             }
             OutlinedButton(onClick = { onDelete(installer) }) {
-                Text("Remove")
+                Text(vxText("Remove")))
             }
         }
     }

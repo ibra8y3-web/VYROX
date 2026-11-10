@@ -49,6 +49,7 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private var desktopModeEnabled by mutableStateOf(true)
+    private var appLanguage by mutableStateOf("en")
     private lateinit var installerStorage: InstallerStorage
     private lateinit var capsuleStorage: CapsuleStorage
     private lateinit var hostCapabilities: HostCapabilities
@@ -118,6 +119,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         desktopModeEnabled = savedInstanceState?.getBoolean(STATE_DESKTOP_MODE) ?: true
+        appLanguage = getSharedPreferences("vyrox_preferences", MODE_PRIVATE)
+            .getString("language", "en")?.takeIf { it == "ar" } ?: "en"
         requestedOrientation = if (desktopModeEnabled) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
@@ -157,6 +160,12 @@ class MainActivity : ComponentActivity() {
                 onStopRuntimeProcess = ::stopRuntimeProcess,
                 statusMessage = statusMessage,
                 isDesktopMode = desktopModeEnabled,
+                language = appLanguage,
+                onLanguageChange = { selectedLanguage ->
+                    appLanguage = if (selectedLanguage == "ar") "ar" else "en"
+                    getSharedPreferences("vyrox_preferences", MODE_PRIVATE)
+                        .edit().putString("language", appLanguage).apply()
+                },
                 onToggleDesktopMode = {
                     desktopModeEnabled = !desktopModeEnabled
                     requestedOrientation = if (desktopModeEnabled) {
