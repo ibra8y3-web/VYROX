@@ -24,6 +24,10 @@ import com.vyrox.runtime.core.host.HostCapabilities
 import com.vyrox.runtime.core.host.HostCapabilitiesProbe
 import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.LinuxRootFsManager
+import com.vyrox.engine.LinuxRootFsArchitecture
+import com.vyrox.engine.ProotCommandPlanner
+import com.vyrox.engine.ProotLaunchRequest
+import com.vyrox.engine.RuntimeProcessSupervisor
 import com.vyrox.runtime.ui.VyroxApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -158,6 +162,7 @@ class MainActivity : ComponentActivity() {
                 onSelectCapsuleSearchResult = ::selectCapsuleSearchResult,
                 onImportRootFs = ::requestRootFsImport,
                 onRemoveRootFs = ::removeRootFs,
+                onTestRootFs = ::testRootFs,
                 onExtractZipEntry = ::extractZipEntry,
                 onCloneCapsule = ::cloneCapsule,
                 onRenameCapsule = ::renameCapsule,
@@ -703,6 +708,79 @@ class MainActivity : ComponentActivity() {
                 refreshCapsuleDirectory()
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not import the file into the Capsule."
+            } finally {
+                isImporting = false
+            }
+        }
+    }
+
+
+    private fun testRootFs(rootFs: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open a Capsule before testing its Linux RootFS."
+            return
+        }
+        if (isImporting) return
+        if (rootFs.architecture != LinuxRootFsArchitecture.ARM64) {
+            statusMessage = "The current Android PRoot host supports only an ARM64 Linux RootFS."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Starting a real PRoot shell probe..."
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val nativeDirectory = File(applicationInfo.nativeLibraryDir)
+                    val proot = ProotExecutableLocator.locate(
+                        nativeLibraryDirectory = nativeDirectory,
+                        supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
+                    ) ?: throw IOException("The Android PRoot executable or static loader is not packaged in this APK.")
+
+                    val rootFsDirectory = rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        rootFs.architecture
+                    ) ?: throw IOException("The selected Linux RootFS is no longer installed in this Capsule.")
+
+                    val plan = ProotCommandPlanner.build(
+                        ProotLaunchRequest(
+                            prootExecutable = proot,
+                            nativeLibraryRoot = nativeDirectory,
+                            rootFsDirectory = rootFsDirectory,
+                            rootFsArchitecture = rootFs.architecture,
+                            guestCommand = "/bin/sh",
+                            guestWorkingDirectory = "/",
+                            arguments = listOf(
+                                "-c",
+                                "printf VYROX_ROOTFS_OK; uname -m; id"
+                            ),
+                            allowedHostRoots = listOf(
+                                filesDir,
+                                cacheDir,
+                                nativeDirectory
+                            )
+                        )
+                    )
+                    val supervisor = RuntimeProcessSupervisor(
+                        logDirectory = File(cacheDir, "runtime-logs"),
+                        allowedHostRoots = listOf(filesDir, cacheDir, nativeDirectory)
+                    )
+                    supervisor.start(
+                        plan = plan,
+                        runId = "rootfs-probe-" + System.currentTimeMillis(),
+                        maxLogBytes = 256L * 1024L
+                    ).await(30_000L)
+                }
+
+                val output = runCatching { result.logFile.readText() }
+                    .getOrDefault("Runtime log could not be read.")
+                    .takeLast(8_000)
+                statusMessage = "PRoot shell exit: " + result.exitCode +
+                    " • timeout: " + result.timedOut +
+                    " • duration: " + result.durationMillis + " ms\n" + output
+            } catch (exception: Exception) {
+                statusMessage = "PRoot shell test failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
             } finally {
                 isImporting = false
             }

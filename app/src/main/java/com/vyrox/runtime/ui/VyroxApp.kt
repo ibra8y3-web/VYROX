@@ -89,6 +89,7 @@ fun VyroxApp(
     onSelectCapsuleSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
+    onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -166,6 +167,7 @@ fun VyroxApp(
                     onSelectCapsuleSearchResult = onSelectCapsuleSearchResult,
                     onImportRootFs = onImportRootFs,
                     onRemoveRootFs = onRemoveRootFs,
+                    onTestRootFs = onTestRootFs,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -290,6 +292,7 @@ fun VyroxApp(
                         onSelectSearchResult = onSelectCapsuleSearchResult,
                         onImportRootFs = onImportRootFs,
                         onRemoveRootFs = onRemoveRootFs,
+                        onTestRootFs = onTestRootFs,
                         onRenameEntry = {
                             pendingRenameEntry = it
                             renameValue = it.name
@@ -715,6 +718,7 @@ internal fun CapsuleExplorerCard(
     onSelectSearchResult: (CapsuleFileEntry) -> Unit,
     onImportRootFs: () -> Unit,
     onRemoveRootFs: (LinuxRootFsInfo) -> Unit,
+    onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
     onMoveEntry: (CapsuleFileEntry) -> Unit,
@@ -806,7 +810,7 @@ internal fun CapsuleExplorerCard(
                 ) {
                     Text("Linux RootFS", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Separate Linux file systems used later by the compatibility runtime. Importing one does not install Wine or start Linux processes.",
+                        "Separate Linux filesystems. The shell test executes uname and id inside the imported ARM64 RootFS; it does not run Windows programs.",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -835,6 +839,12 @@ internal fun CapsuleExplorerCard(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                                OutlinedButton(
+                                    onClick = { onTestRootFs(rootFs) },
+                                    enabled = !isImporting && rootFs.architecture == LinuxRootFsArchitecture.ARM64
+                                ) {
+                                    Text("Test shell")
                                 }
                                 OutlinedButton(onClick = { onRemoveRootFs(rootFs) }) {
                                     Text("Remove")
