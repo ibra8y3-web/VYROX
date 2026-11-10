@@ -30,9 +30,29 @@ class WindowsProgramManager(
             ?.canonicalFile
             ?.takeIf { it.parentFile == canonicalDrive || it.path.startsWith(canonicalDrive.path + File.separator) }
 
-        val roots = listOf("Program Files", "Program Files (x86)", "Games")
-            .map { File(canonicalDrive, it) }
-            .filter { it.isDirectory && !Files.isSymbolicLink(it.toPath()) }
+        val roots = linkedSetOf<File>()
+        listOf("Program Files", "Program Files (x86)", "Games").forEach { relative ->
+            resolveDirectory(canonicalDrive, relative)?.let(roots::add)
+        }
+        findDirectory(canonicalDrive, "Users")?.let { usersDirectory ->
+            usersDirectory.listFiles()
+                .orEmpty()
+                .asSequence()
+                .filter { it.isDirectory && !Files.isSymbolicLink(it.toPath()) }
+                .sortedBy { it.name.lowercase(Locale.ROOT) }
+                .take(MAX_USER_PROFILES)
+                .forEach { userDirectory ->
+                    listOf(
+                        "AppData/Local/Programs",
+                        "AppData/Roaming/Programs",
+                        "AppData/Roaming/Microsoft/Windows/Start Menu/Programs",
+                        "Desktop",
+                        "Downloads"
+                    ).forEach { relative ->
+                        resolveDirectory(userDirectory, relative)?.let(roots::add)
+                    }
+                }
+        }
 
         val discovered = linkedMapOf<String, File>()
         val pending = ArrayDeque<Pair<File, Int>>()
@@ -96,6 +116,27 @@ class WindowsProgramManager(
             ?.takeIf { it.path.startsWith(directory.canonicalPath + File.separator) }
     }
 
+    private fun findDirectory(parent: File, name: String): File? {
+        val canonicalParent = parent.canonicalFile
+        return parent.listFiles()
+            .orEmpty()
+            .firstOrNull {
+                it.name.equals(name, ignoreCase = true) &&
+                    it.isDirectory &&
+                    !Files.isSymbolicLink(it.toPath())
+            }
+            ?.canonicalFile
+            ?.takeIf { it.parentFile == canonicalParent }
+    }
+
+    private fun resolveDirectory(root: File, relativePath: String): File? {
+        var current = root
+        for (segment in relativePath.split('/')) {
+            current = findDirectory(current, segment) ?: return null
+        }
+        return current
+    }
+
     private fun isLikelyApplication(fileName: String): Boolean {
         val name = fileName.lowercase(Locale.ROOT)
         return !name.startsWith("unins") &&
@@ -116,6 +157,7 @@ class WindowsProgramManager(
 
     private companion object {
         const val MAX_RESULTS = 500
+        const val MAX_USER_PROFILES = 128
         const val MAX_DEPTH = 6
         const val MAX_VISITED_DIRECTORIES = 5_000
         const val ICON_DIRECTORY = "VYROX/Icons"
