@@ -278,7 +278,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
             throw IllegalArgumentException("The selected item cannot be renamed.")
         }
 
-        val parent = source.parentFile.canonicalFile
+        val parent = source.parentFile?.canonicalFile
+            ?: throw IOException("The selected item has no parent directory.")
         if (hasCaseInsensitiveSibling(parent, newName, except = source)) {
             throw IOException("An item with this name already exists (Windows ignores name casing).")
         }
@@ -314,7 +315,9 @@ class CapsuleStorage(private val capsuleRoot: File) {
         if (source.isDirectory && isWithinRoot(source, destinationDirectory)) {
             throw IllegalArgumentException("A folder cannot be moved into itself or one of its children.")
         }
-        if (source.parentFile.canonicalFile == destinationDirectory.canonicalFile) {
+        val sourceParent = source.parentFile?.canonicalFile
+            ?: throw IOException("The selected item has no parent directory.")
+        if (sourceParent == destinationDirectory.canonicalFile) {
             return toEntry(driveRoot, source)
         }
 
@@ -389,7 +392,8 @@ class CapsuleStorage(private val capsuleRoot: File) {
             throw IllegalArgumentException("Select a ZIP archive inside this Capsule.")
         }
 
-        val parent = archive.parentFile.canonicalFile
+        val parent = archive.parentFile?.canonicalFile
+            ?: throw IOException("The ZIP archive has no parent directory.")
         if (!isWithinRoot(driveRoot, parent)) {
             throw IllegalArgumentException("The ZIP destination is outside this Capsule drive.")
         }

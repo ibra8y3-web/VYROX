@@ -9,7 +9,7 @@ import java.nio.file.StandardCopyOption
 import java.util.Properties
 import java.util.UUID
 
-data class WinePrefixCreationTicket internal constructor(
+class WinePrefixCreationTicket internal constructor(
     val capsuleId: String,
     val stagingDirectory: File,
     val guestPrefixPath: String,

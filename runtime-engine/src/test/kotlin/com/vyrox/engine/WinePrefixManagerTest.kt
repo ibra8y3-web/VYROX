@@ -114,7 +114,13 @@ class WinePrefixManagerTest {
             val ticket = manager.prepareCreation(UUID.randomUUID().toString())
             val alias = File(ticket.stagingDirectory.parentFile, ".staging-" + ticket.capsuleId + "-alias")
             Files.createSymbolicLink(alias.toPath(), ticket.stagingDirectory.toPath())
-            val forged = ticket.copy(stagingDirectory = alias)
+            val forged = WinePrefixCreationTicket(
+                ticket.capsuleId,
+                alias,
+                ticket.guestPrefixPath,
+                ticket.guestDriveCPath,
+                ticket.guestDriveDPath
+            )
 
             assertThrows(SecurityException::class.java) {
                 manager.finalizeCreation(forged, 0, "wine-11.0")
@@ -149,7 +155,13 @@ class WinePrefixManagerTest {
         try {
             val manager = WinePrefixManager(root)
             val ticket = manager.prepareCreation(UUID.randomUUID().toString())
-            val forged = ticket.copy(stagingDirectory = outside)
+            val forged = WinePrefixCreationTicket(
+                ticket.capsuleId,
+                outside,
+                ticket.guestPrefixPath,
+                ticket.guestDriveCPath,
+                ticket.guestDriveDPath
+            )
 
             assertThrows(SecurityException::class.java) {
                 manager.finalizeCreation(forged, 0, "wine-11.0")

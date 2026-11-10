@@ -426,11 +426,12 @@ fun VyroxApp(
     }
 
 
-    if (snapshotManagerCapsule != null) {
-        val capsule = snapshotManagerCapsule
+    val snapshotCapsule = snapshotManagerCapsule
+    if (snapshotCapsule != null) {
+        val capsule = snapshotCapsule
         AlertDialog(
             onDismissRequest = onCloseCapsuleSnapshotManager,
-            title = { Text("Snapshots — " + (capsule?.name ?: "")) },
+            title = { Text("Snapshots — " + capsule.name) },
             text = {
                 if (capsuleSnapshots.isEmpty()) {
                     Text("No snapshots have been created for this Capsule.")
@@ -459,13 +460,13 @@ fun VyroxApp(
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = {
-                                                capsule?.let { onRestoreCapsuleSnapshot(it, snapshot) }
+                                                onRestoreCapsuleSnapshot(capsule, snapshot)
                                             },
-                                            enabled = capsule != null && !isImporting
+                                            enabled = !isImporting
                                         ) { Text("Restore") }
                                         OutlinedButton(
                                             onClick = {
-                                                capsule?.let { onDeleteCapsuleSnapshot(it, snapshot) }
+                                                onDeleteCapsuleSnapshot(capsule, snapshot)
                                             },
                                             enabled = capsule != null && !isImporting
                                         ) { Text("Delete") }
