@@ -123,10 +123,19 @@ object GraphicsTranslationPlan {
             test -x "@D@DXVK_DIR/setup_dxvk.sh"
             test -x "@D@VKD3D_DIR/setup_vkd3d_proton.sh"
 
-            "@D@DXVK_DIR/setup_dxvk.sh" install --with-d3d10
+            "@D@DXVK_DIR/setup_dxvk.sh" install --with-d3d10 --without-dxgi
             "@D@VKD3D_DIR/setup_vkd3d_proton.sh" install
 
-            WINDOWS_DIR="$(find "@D@PREFIX/drive_c" -mindepth 1 -maxdepth 1 -type d -iname windows -print -quit)"
+            CAPSULE_C="$(readlink -f "@D@PREFIX/drive_c")"
+            test -d "@D@CAPSULE_C" || {
+                echo "The Capsule C: drive symlink could not be resolved." >&2
+                exit 70
+            }
+            case "@D@CAPSULE_C" in
+                /mnt/vyrox/capsules/*/drive_c) ;;
+                *) echo "The Capsule C: drive escaped the VYROX storage root." >&2; exit 70 ;;
+            esac
+            WINDOWS_DIR="$(find "@D@CAPSULE_C" -mindepth 1 -maxdepth 1 -type d -iname windows -print -quit)"
             test -n "@D@WINDOWS_DIR"
             SYSTEM32="$(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname system32 -print -quit)"
             SYSWOW64="$(find "@D@WINDOWS_DIR" -mindepth 1 -maxdepth 1 -type d -iname syswow64 -print -quit)"
