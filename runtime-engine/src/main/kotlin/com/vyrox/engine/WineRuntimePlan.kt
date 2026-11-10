@@ -201,7 +201,8 @@ object WineRuntimePlan {
             VNC_PID=@D@!
 
             if pulseaudio --start --exit-idle-time=-1 --log-target=file:/tmp/vyrox-pulse.log >/dev/null 2>&1; then
-                if pactl load-module module-null-sink sink_name=vyrox >/dev/null 2>&1; then
+                if pactl load-module module-null-sink sink_name=vyrox >/dev/null 2>&1 &&
+                    pactl set-default-sink vyrox >/dev/null 2>&1; then
                     (parec --device=vyrox.monitor --raw --format=s16le --rate=48000 --channels=2 2>/dev/null | nc -q 1 127.0.0.1 4472 >/dev/null 2>&1) &
                     AUDIO_PID=@D@!
                     echo "VYROX_AUDIO_BRIDGE_STARTED"

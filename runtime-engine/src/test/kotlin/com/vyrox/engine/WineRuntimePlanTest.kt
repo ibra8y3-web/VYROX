@@ -75,6 +75,7 @@ class WineRuntimePlanTest {
             assertTrue(exe.contains("x11vnc -display :99 -localhost -nopw"))
             assertTrue(exe.contains("VYROX_WINDOWS_DESKTOP_READY"))
             assertTrue(exe.contains("VYROX_AUDIO_BRIDGE_STARTED"))
+            assertTrue(exe.contains("pactl set-default-sink vyrox"))
             assertTrue(exe.contains("Setup.exe"))
             assertTrue(msi.contains("msiexec /i"))
             assertTrue(msi.contains("Office.msi"))
