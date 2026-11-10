@@ -13,6 +13,7 @@ import java.nio.file.Files
  */
 object ProotExecutableLocator {
     const val FILE_NAME = "libproot.so"
+    const val LOADER_FILE_NAME = "libproot-loader.so"
     val REQUIRED_SHARED_LIBRARIES = listOf("libtalloc.so.2", "libandroid-shmem.so")
     private const val ARM64_ELF_MACHINE = 183
     private const val ELF_HEADER_BYTES = 64
@@ -36,6 +37,16 @@ object ProotExecutableLocator {
             !isArm64PieExecutable(candidate)
         ) return null
 
+        val loaderPath = File(nativeRoot, LOADER_FILE_NAME)
+        if (Files.isSymbolicLink(loaderPath.toPath())) return null
+        val loader = loaderPath.canonicalFile
+        if (
+            loader.parentFile != nativeRoot ||
+            !loader.isFile ||
+            !loader.canExecute() ||
+            !isArm64StaticLoader(loader)
+        ) return null
+
         REQUIRED_SHARED_LIBRARIES.forEach { libraryName ->
             val libraryPath = File(nativeRoot, libraryName)
             if (Files.isSymbolicLink(libraryPath.toPath())) return null
@@ -53,6 +64,13 @@ object ProotExecutableLocator {
         val header = readElfHeader(file) ?: return false
         return isArm64ElfHeader(header) &&
             readUnsignedShortLe(header, 16) == 3 &&
+            readUnsignedLongLe(header, 24) > 0L
+    }
+
+    private fun isArm64StaticLoader(file: File): Boolean {
+        val header = readElfHeader(file) ?: return false
+        return isArm64ElfHeader(header) &&
+            readUnsignedShortLe(header, 16) == 2 &&
             readUnsignedLongLe(header, 24) > 0L
     }
 
