@@ -114,7 +114,7 @@ object Box64BuildPlan {
         SMOKE_SOURCE='/tmp/vyrox-box64-smoke.S'
         SMOKE_OBJECT='/tmp/vyrox-box64-smoke.o'
         SMOKE_BINARY='/tmp/vyrox-box64-smoke'
-        cat > "$@D@SMOKE_SOURCE" <<'VYROX_ASM'
+        cat > "@D@SMOKE_SOURCE" <<'VYROX_ASM'
         .global _start
         .section .text
         _start:
@@ -132,17 +132,17 @@ object Box64BuildPlan {
         message_length = . - message
         VYROX_ASM
 
-        x86_64-linux-gnu-as --64 -o "$@D@SMOKE_OBJECT" "$@D@SMOKE_SOURCE"
-        x86_64-linux-gnu-ld -static -o "$@D@SMOKE_BINARY" "$@D@SMOKE_OBJECT"
-        readelf -h "$@D@SMOKE_BINARY" | grep -Eq 'Class:[[:space:]]+ELF64' || {
+        x86_64-linux-gnu-as --64 -o "@D@SMOKE_OBJECT" "@D@SMOKE_SOURCE"
+        x86_64-linux-gnu-ld -static -o "@D@SMOKE_BINARY" "@D@SMOKE_OBJECT"
+        readelf -h "@D@SMOKE_BINARY" | grep -Eq 'Class:[[:space:]]+ELF64' || {
             echo 'The Box64 smoke executable is not ELF64.' >&2
             exit 27
         }
-        readelf -h "$@D@SMOKE_BINARY" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64' || {
+        readelf -h "@D@SMOKE_BINARY" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64' || {
             echo 'The Box64 smoke executable is not x86-64.' >&2
             exit 28
         }
-        "$@D@BOX64_BINARY" "$@D@SMOKE_BINARY" > /tmp/vyrox-box64-smoke.log 2>&1 || {
+        "@D@BOX64_BINARY" "@D@SMOKE_BINARY" > /tmp/vyrox-box64-smoke.log 2>&1 || {
             cat /tmp/vyrox-box64-smoke.log >&2
             echo 'Box64 could not execute the x86-64 Linux syscall smoke program.' >&2
             exit 29
@@ -152,7 +152,7 @@ object Box64BuildPlan {
             echo 'Box64 output did not contain the x86-64 smoke marker.' >&2
             exit 30
         }
-        rm -f "$@D@SMOKE_SOURCE" "$@D@SMOKE_OBJECT" "$@D@SMOKE_BINARY" /tmp/vyrox-box64-smoke.log
+        rm -f "@D@SMOKE_SOURCE" "@D@SMOKE_OBJECT" "@D@SMOKE_BINARY" /tmp/vyrox-box64-smoke.log
 
         mkdir -p /usr/local/share/vyrox
         printf 'version=%s\nsource_commit=%s\nsource_url=%s\nverification=version_aarch64_elf_x86_64_smoke\nx86_64_smoke_test=passed\ninstalled_at_epoch_seconds=%s\n' \
