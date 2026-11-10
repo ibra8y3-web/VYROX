@@ -245,7 +245,8 @@ object WineRuntimePlan {
                         "@D@user_home/AppData/Local/Programs" \
                         "@D@user_home/AppData/Roaming/Programs" \
                         "@D@user_home/AppData/Roaming/Microsoft/Windows/Start Menu/Programs" \
-                        "@D@user_home/Desktop"; do
+                        "@D@user_home/Desktop" \
+                        "@D@user_home/Downloads"; do
                         [ -d "@D@root" ] || continue
                         find "@D@root" -maxdepth 6 -type f -iname '*.exe' -print
                     done
