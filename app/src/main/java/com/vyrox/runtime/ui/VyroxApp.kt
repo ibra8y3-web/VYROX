@@ -812,6 +812,7 @@ internal fun ActiveRuntimeOperationCard(
     }
 }
 
+@Composable
 internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,
