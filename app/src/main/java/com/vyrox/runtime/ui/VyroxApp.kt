@@ -576,18 +576,22 @@ internal fun RuntimeEngineStatusCard(
     val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
         X64RuntimePrerequisites(
             hostAbis = profile.supported64BitAbis.toSet(),
-            linuxUserlandInstalled = rootFsImages.any {
+            arm64RootFsInstalled = rootFsImages.any {
                 it.architecture == LinuxRootFsArchitecture.ARM64
             },
-            x86_64RootFsInstalled = rootFsImages.any {
-                it.architecture == LinuxRootFsArchitecture.X86_64
-            },
-            arm64WineInstalled = false,
+            x86_64WineWow64Installed = false,
+            x86_64RuntimeLibrariesInstalled = false,
             box64Installed = false,
             prootInstalled = prootBinaryAvailable,
+            displayBridgeInstalled = false,
+            audioBridgeInstalled = false,
+            inputBridgeInstalled = false,
             d3d11Requested = true,
             dxvkInstalled = false,
-            vulkan = vulkan
+            vulkan = vulkan,
+            windowsPeLoaderInstalled = false,
+            capsuleDriveMappingInstalled = false,
+            physicalDeviceExecutionVerified = false
         )
     )
 
