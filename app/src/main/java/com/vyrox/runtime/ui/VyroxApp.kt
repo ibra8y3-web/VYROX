@@ -180,6 +180,7 @@ fun VyroxApp(
     hostCapabilities: HostCapabilities,
     prootBinaryAvailable: Boolean,
     box64Installed: Boolean,
+    wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     isImporting: Boolean,
     activeRuntimeLabel: String?,
@@ -211,6 +212,8 @@ fun VyroxApp(
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
+    onInstallWine: (LinuxRootFsInfo) -> Unit,
+    onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
     onExtractZipEntry: (CapsuleFileEntry) -> Unit,
     onCloneCapsule: (CapsuleInfo) -> Unit,
     onRenameCapsule: (CapsuleInfo, String) -> Unit,
@@ -256,6 +259,7 @@ fun VyroxApp(
                     hostCapabilities = hostCapabilities,
                     prootBinaryAvailable = prootBinaryAvailable,
                     box64Installed = box64Installed,
+                    wineInstalled = wineInstalled,
                     winePrefixInfo = winePrefixInfo,
                     isImporting = isImporting,
                     activeRuntimeLabel = activeRuntimeLabel,
@@ -300,6 +304,8 @@ fun VyroxApp(
                     onTestRootFs = onTestRootFs,
                     onBuildBox64 = onBuildBox64,
                     onCheckWinePackages = onCheckWinePackages,
+                    onInstallWine = onInstallWine,
+                    onCreateWinePrefix = onCreateWinePrefix,
                     onExtractZipEntry = onExtractZipEntry,
                     onCloneCapsule = onCloneCapsule,
                     onRenameCapsule = { capsule ->
@@ -436,7 +442,10 @@ fun VyroxApp(
                         onTestRootFs = onTestRootFs,
                         onBuildBox64 = onBuildBox64,
                         onCheckWinePackages = onCheckWinePackages,
+                        onInstallWine = onInstallWine,
+                        onCreateWinePrefix = onCreateWinePrefix,
                         box64Installed = box64Installed,
+                        wineInstalled = wineInstalled,
                         winePrefixInfo = winePrefixInfo,
                         onRenameEntry = {
                             pendingRenameEntry = it
@@ -911,7 +920,10 @@ internal fun CapsuleExplorerCard(
     onTestRootFs: (LinuxRootFsInfo) -> Unit,
     onBuildBox64: (LinuxRootFsInfo) -> Unit,
     onCheckWinePackages: (LinuxRootFsInfo) -> Unit,
+    onInstallWine: (LinuxRootFsInfo) -> Unit,
+    onCreateWinePrefix: (LinuxRootFsInfo) -> Unit,
     box64Installed: Boolean,
+    wineInstalled: Boolean,
     winePrefixInfo: WinePrefixInfo?,
     onRenameEntry: (CapsuleFileEntry) -> Unit,
     onCopyEntry: (CapsuleFileEntry) -> Unit,
@@ -1070,6 +1082,25 @@ internal fun CapsuleExplorerCard(
                                             enabled = !isImporting
                                         ) {
                                             Text(if (box64Installed) vxText("Rebuild Box64") else vxText("Build Box64 0.4.4"))
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onInstallWine(rootFs) },
+                                            enabled = !isImporting && box64Installed && !wineInstalled
+                                        ) {
+                                            Text(if (wineInstalled) vxText("Wine 11 installed") else vxText("Install Wine 11 WoW64"))
+                                        }
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { onCreateWinePrefix(rootFs) },
+                                            enabled = !isImporting && box64Installed && wineInstalled && winePrefixInfo == null
+                                        ) {
+                                            Text(vxText("Create Windows prefix"))
                                         }
                                     }
                                     Row(

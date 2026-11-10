@@ -30,6 +30,8 @@ import com.vyrox.engine.Box64BuildPlan
 import com.vyrox.engine.WinePrefixInfo
 import com.vyrox.engine.WinePrefixManager
 import com.vyrox.engine.WinePackagePreflight
+import com.vyrox.engine.WineRuntimePlan
+import com.vyrox.engine.WinePrefixCreationTicket
 import com.vyrox.engine.ProotCommandPlanner
 import com.vyrox.engine.ProotBindMount
 import com.vyrox.engine.ProotLaunchRequest
@@ -56,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var rootFsManager: LinuxRootFsManager
     private var prootBinaryAvailable by mutableStateOf(false)
     private var box64Installed by mutableStateOf(false)
+    private var wineInstalled by mutableStateOf(false)
     private var winePrefixInfo by mutableStateOf<WinePrefixInfo?>(null)
     private val installers = mutableStateListOf<ImportedInstaller>()
     private val capsules = mutableStateListOf<CapsuleInfo>()
@@ -153,6 +156,7 @@ class MainActivity : ComponentActivity() {
                 hostCapabilities = hostCapabilities,
                 prootBinaryAvailable = prootBinaryAvailable,
                 box64Installed = box64Installed,
+                wineInstalled = wineInstalled,
                 winePrefixInfo = winePrefixInfo,
                 isImporting = isImporting,
                 activeRuntimeLabel = activeRuntimeLabel,
@@ -197,6 +201,8 @@ class MainActivity : ComponentActivity() {
                 onTestRootFs = ::testRootFs,
                 onBuildBox64 = ::buildBox64,
                 onCheckWinePackages = ::checkWinePackages,
+                onInstallWine = ::installWine,
+                onCreateWinePrefix = ::createWinePrefix,
                 onExtractZipEntry = ::extractZipEntry,
                 onCloneCapsule = ::cloneCapsule,
                 onRenameCapsule = ::renameCapsule,
@@ -658,18 +664,24 @@ class MainActivity : ComponentActivity() {
                             rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
                                 ?.let(Box64BuildPlan::isInstalled)
                         } == true
+                    val hasWine = arm64RootFs
+                        ?.let { info ->
+                            rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
+                                ?.let(WineRuntimePlan::isInstalled)
+                        } == true
                     val prefixInfo = arm64RootFs
                         ?.let { info ->
                             rootFsManager.getRootFsDirectory(capsule.id, info.architecture)
                                 ?.let { WinePrefixManager(it).inspect(capsule.id) }
                         }
-                    Triple(installed, hasBox64, prefixInfo)
+                    RootFsReadiness(installed, hasBox64, hasWine, prefixInfo)
                 }
                 if (selectedCapsule?.id == capsule.id) {
                     rootFsImages.clear()
-                    rootFsImages.addAll(rootFsState.first)
-                    box64Installed = rootFsState.second
-                    winePrefixInfo = rootFsState.third
+                    rootFsImages.addAll(rootFsState.images)
+                    box64Installed = rootFsState.box64Installed
+                    wineInstalled = rootFsState.wineInstalled
+                    winePrefixInfo = rootFsState.winePrefixInfo
                 }
             } catch (exception: Exception) {
                 statusMessage = exception.message ?: "Could not read installed Linux RootFS images."
@@ -851,6 +863,225 @@ class MainActivity : ComponentActivity() {
             } finally {
                 isImporting = false
             }
+        }
+    }
+
+    private fun installWine(rootFs: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open a Capsule before installing Wine."
+            return
+        }
+        if (isImporting) return
+        if (rootFs.architecture != LinuxRootFsArchitecture.ARM64) {
+            statusMessage = "Wine WoW64 installation currently requires an ARM64 Linux RootFS."
+            return
+        }
+        if (!box64Installed) {
+            statusMessage = "Build and verify Box64 before installing the x86-64 Wine runtime."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            wineInstalled = false
+            statusMessage = "Installing WineHQ stable WoW64 inside this Capsule's Linux RootFS. This can download several hundred megabytes."
+            var prepared: PreparedRootFsShell? = null
+            try {
+                prepared = withContext(Dispatchers.IO) {
+                    val directory = rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        LinuxRootFsArchitecture.ARM64
+                    ) ?: throw IOException("The selected ARM64 RootFS is no longer installed.")
+                    createRootFsShellPlan(
+                        rootFsDirectory = directory,
+                        shellScript = WineRuntimePlan.createInstallShellScript(),
+                        extraMounts = emptyList(),
+                        fakeRoot = true
+                    )
+                }
+                val execution = runManagedRuntimeProcess(
+                    plan = prepared.plan,
+                    runId = "wine-install-" + System.currentTimeMillis(),
+                    maxLogBytes = 8L * 1024L * 1024L,
+                    timeoutMillis = 60L * 60L * 1000L,
+                    label = "Install WineHQ stable WoW64"
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
+                        .getOrDefault("Wine installation log could not be read.")
+                        .takeLast(16_000)
+                }
+                val verified = withContext(Dispatchers.IO) {
+                    WineRuntimePlan.isInstalled(
+                        rootFsManager.getRootFsDirectory(capsule.id, LinuxRootFsArchitecture.ARM64)
+                            ?: throw IOException("The RootFS disappeared after Wine installation.")
+                    )
+                }
+                wineInstalled = !execution.stoppedByUser &&
+                    execution.result.exitCode == 0 &&
+                    !execution.result.timedOut &&
+                    output.contains("VYROX_WINE_READY") &&
+                    verified
+                statusMessage = when {
+                    execution.stoppedByUser ->
+                        "Wine installation was stopped. The runtime is not marked as installed.\n" + output
+                    execution.result.timedOut ->
+                        "Wine installation timed out. The runtime is not marked as installed.\n" + output
+                    wineInstalled ->
+                        "WineHQ stable WoW64 is installed and its x86-64 loader and wineboot were verified through Box64. A Windows graphical display is not connected yet.\n" + output
+                    else ->
+                        "Wine installation did not pass the exit-code, Wine 11+ version, Box64 and loader verification checks.\n" + output
+                }
+            } catch (exception: Exception) {
+                wineInstalled = false
+                statusMessage = "Wine installation failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                withContext(Dispatchers.IO) { prepared?.resolverFile?.delete() }
+                isImporting = false
+                refreshRootFsImages()
+            }
+        }
+    }
+
+    private fun createWinePrefix(rootFs: LinuxRootFsInfo) {
+        val capsule = selectedCapsule ?: run {
+            statusMessage = "Open a Capsule before creating a Wine prefix."
+            return
+        }
+        if (isImporting) return
+        if (!box64Installed || !wineInstalled) {
+            statusMessage = "Build Box64 and install WineHQ stable before creating a Windows prefix."
+            return
+        }
+
+        lifecycleScope.launch {
+            isImporting = true
+            statusMessage = "Creating a real Wine 11 WoW64 prefix and mounting this Capsule's C: and D: drives..."
+            var setup: PreparedWinePrefix? = null
+            var finalized = false
+            try {
+                val preparedSetup = withContext(Dispatchers.IO) {
+                    val directory = rootFsManager.getRootFsDirectory(
+                        capsule.id,
+                        LinuxRootFsArchitecture.ARM64
+                    ) ?: throw IOException("The selected ARM64 RootFS is no longer installed.")
+                    val manager = WinePrefixManager(directory)
+                    val ticket = manager.prepareCreation(capsule.id)
+                    try {
+                        val preparedShell = createRootFsShellPlan(
+                            rootFsDirectory = directory,
+                            shellScript = WineRuntimePlan.createPrefixShellScript(ticket.guestPrefixPath),
+                            extraMounts = listOf(
+                                ProotBindMount(ticket.hostDriveCDirectory, ticket.guestDriveCPath),
+                                ProotBindMount(ticket.hostDriveDDirectory, ticket.guestDriveDPath)
+                            ),
+                            fakeRoot = true
+                        )
+                        PreparedWinePrefix(directory, manager, ticket, preparedShell)
+                    } catch (exception: Exception) {
+                        manager.abortCreation(ticket)
+                        throw exception
+                    }
+                }
+                setup = preparedSetup
+                val execution = runManagedRuntimeProcess(
+                    plan = preparedSetup.shell.plan,
+                    runId = "wine-prefix-" + System.currentTimeMillis(),
+                    maxLogBytes = 2L * 1024L * 1024L,
+                    timeoutMillis = 20L * 60L * 1000L,
+                    label = "Create Capsule Wine prefix"
+                )
+                val output = withContext(Dispatchers.IO) {
+                    runCatching { execution.result.logFile.readText() }
+                        .getOrDefault("Wine prefix initialization log could not be read.")
+                        .takeLast(12_000)
+                }
+                if (
+                    execution.stoppedByUser ||
+                    execution.result.timedOut ||
+                    execution.result.exitCode != 0 ||
+                    !output.contains("VYROX_WINEBOOT_OK")
+                ) {
+                    throw IOException(
+                        "wineboot did not finish successfully; no prefix was activated.\n" + output
+                    )
+                }
+                val prefix = withContext(Dispatchers.IO) {
+                    preparedSetup.manager.finalizeCreation(
+                        preparedSetup.ticket,
+                        execution.result.exitCode,
+                        output
+                    )
+                }
+                finalized = true
+                winePrefixInfo = prefix
+                statusMessage =
+                    "A real Wine " + prefix.wineVersion + " WoW64 prefix is verified. C: and D: point to this Capsule's existing file-manager folders. Graphical Windows windows are not connected yet.\n" +
+                        output
+            } catch (exception: Exception) {
+                statusMessage = "Wine prefix creation failed: " +
+                    (exception.message ?: exception.javaClass.simpleName)
+            } finally {
+                withContext(Dispatchers.IO) {
+                    setup?.let {
+                        if (!finalized) it.manager.abortCreation(it.ticket)
+                        it.shell.resolverFile.delete()
+                    }
+                }
+                isImporting = false
+                refreshRootFsImages()
+            }
+        }
+    }
+
+    private fun createRootFsShellPlan(
+        rootFsDirectory: File,
+        shellScript: String,
+        extraMounts: List<ProotBindMount>,
+        fakeRoot: Boolean
+    ): PreparedRootFsShell {
+        val nativeDirectory = File(applicationInfo.nativeLibraryDir)
+        val proot = ProotExecutableLocator.locate(
+            nativeLibraryDirectory = nativeDirectory,
+            supported64BitAbis = Build.SUPPORTED_64_BIT_ABIS.toList()
+        ) ?: throw IOException("The Android PRoot executable or static loader is not packaged in this APK.")
+        val resolver = createGuestResolverConfiguration()
+        try {
+            val allowedRoots = listOf(
+                filesDir,
+                cacheDir,
+                nativeDirectory,
+                File("/dev"),
+                File("/proc")
+            )
+            val mounts = mutableListOf(
+                ProotBindMount(File("/dev/null"), "/dev/null"),
+                ProotBindMount(File("/dev/zero"), "/dev/zero"),
+                ProotBindMount(File("/dev/urandom"), "/dev/urandom"),
+                ProotBindMount(File("/dev/random"), "/dev/random"),
+                ProotBindMount(File("/proc"), "/proc"),
+                ProotBindMount(resolver, "/etc/resolv.conf")
+            )
+            mounts.addAll(extraMounts)
+            val plan = ProotCommandPlanner.build(
+                ProotLaunchRequest(
+                    prootExecutable = proot,
+                    nativeLibraryRoot = nativeDirectory,
+                    rootFsDirectory = rootFsDirectory,
+                    rootFsArchitecture = LinuxRootFsArchitecture.ARM64,
+                    guestCommand = "/bin/sh",
+                    guestWorkingDirectory = "/",
+                    arguments = listOf("-c", shellScript),
+                    fakeRoot = fakeRoot,
+                    bindMounts = mounts,
+                    allowedHostRoots = allowedRoots
+                )
+            )
+            return PreparedRootFsShell(plan, resolver)
+        } catch (exception: Exception) {
+            resolver.delete()
+            throw exception
         }
     }
 
@@ -1158,6 +1389,25 @@ class MainActivity : ComponentActivity() {
     private data class RuntimeProcessExecution(
         val result: RuntimeProcessResult,
         val stoppedByUser: Boolean
+    )
+
+    private data class RootFsReadiness(
+        val images: List<LinuxRootFsInfo>,
+        val box64Installed: Boolean,
+        val wineInstalled: Boolean,
+        val winePrefixInfo: WinePrefixInfo?
+    )
+
+    private data class PreparedRootFsShell(
+        val plan: ProotCommandPlan,
+        val resolverFile: File
+    )
+
+    private data class PreparedWinePrefix(
+        val rootFsDirectory: File,
+        val manager: WinePrefixManager,
+        val ticket: WinePrefixCreationTicket,
+        val shell: PreparedRootFsShell
     )
 
     private data class CapsuleImportTarget(
