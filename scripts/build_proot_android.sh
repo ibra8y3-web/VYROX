@@ -91,6 +91,7 @@ done
 JOBS="${VYROX_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
 export CC AR RANLIB STRIP
 export CFLAGS="-O2 -fPIC"
+export CPPFLAGS="-D_FILE_OFFSET_BITS=64"
 export LDFLAGS="-Wl,-z,noexecstack"
 
 echo "Building libtalloc $TALLOC_VERSION for arm64-v8a"
@@ -123,12 +124,16 @@ ANSWERS
 
 (
   cd "$TALLOC_SRC"
-  ./configure \
+  if ! ./configure \
     --prefix="$PREFIX" \
     --disable-rpath \
     --disable-python \
     --cross-compile \
-    --cross-answers=cross-answers.txt
+    --cross-answers=cross-answers.txt; then
+    echo "talloc cross-answers after the failed configure pass:" >&2
+    cat cross-answers.txt >&2
+    exit 1
+  fi
   make -j"$JOBS"
   make install
   if [[ -d bin/default ]]; then
@@ -163,7 +168,7 @@ unset PROOT_UNBUNDLE_LOADER || true
     OBJCOPY="$OBJCOPY" \
     OBJDUMP="$OBJDUMP" \
     CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\" -I. -I$PROOT_SRC/src -I$PREFIX/include" \
-    CFLAGS="-Wall -Wextra -O2 -fPIC -fPIE" \
+    CFLAGS="-Wall -Wextra -O2 -fPIC -fPIE -DWITH_LIBANDROID_SHMEM" \
     LDFLAGS="-L$PREFIX/lib -ltalloc -landroid-shmem -Wl,-z,noexecstack -Wl,--no-undefined -pie" \
     PROOT_WITH_LIBANDROID_SHMEM=true \
     proot loader/loader
