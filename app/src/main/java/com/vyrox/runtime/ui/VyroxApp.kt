@@ -78,6 +78,9 @@ private val VyroxArabicText = mapOf(
     "Import and inspect EXE, MSI and ZIP files" to "استيراد وفحص ملفات EXE وMSI وZIP",
     "Manage RootFS, test PRoot and build Box64" to "إدارة RootFS واختبار PRoot وبناء Box64",
     "GPU / DirectX translation: not integrated" to "ترجمة الرسوميات وDirectX: لم يتم دمجها بعد",
+    "Box64, Wine 11+ and per-Capsule Prefix setup actions are available; physical-device validation is still required." to "أدوات Box64 وWine 11+ وإنشاء بيئة مستقلة لكل Capsule متاحة؛ وما زال اختبار الهاتف الفعلي مطلوبًا.",
+    "DXVK/VKD3D installation is available after the Vulkan preflight; real game rendering is not yet certified." to "تثبيت DXVK وVKD3D متاح بعد فحص Vulkan؛ ولم يتم اعتماد تشغيل الألعاب فعليًا بعد.",
+    "Install" to "تثبيت وتشغيل",
     "Windows runtime environment for Android" to "بيئة تشغيل Windows على أندرويد",
     "Your PC. Your Phone. Your Environment." to "كمبيوترك وبيئتك في هاتفك.",
     "A desktop workspace inside Android" to "سطح مكتب متكامل داخل أندرويد",
@@ -610,11 +613,10 @@ fun VyroxApp(
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(vxText("Runtime engines"), fontWeight = FontWeight.Bold)
-                        Text(vxText("Wine compatibility: not integrated"))
-                        Text(vxText("CPU translation: not integrated"))
-                        Text(vxText("GPU / DirectX translation: not integrated"))
+                        Text(vxText("Box64, Wine 11+ and per-Capsule Prefix setup actions are available; physical-device validation is still required."))
+                        Text(vxText("DXVK/VKD3D installation is available after the Vulkan preflight; real game rendering is not yet certified."))
                         Text(
-                            "Capsule isolation and Windows process execution are future milestones.",
+                            "Capsules are file-separated workspaces, not virtual machines or hardened security sandboxes.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
                     }
