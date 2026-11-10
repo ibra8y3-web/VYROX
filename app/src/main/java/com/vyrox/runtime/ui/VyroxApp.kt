@@ -401,7 +401,15 @@ fun VyroxApp(
                     )
                 }
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
+                RuntimeEngineStatusCard(
+                    hostCapabilities,
+                    rootFsImages,
+                    prootBinaryAvailable,
+                    box64Installed,
+                    wineInstalled,
+                    winePrefixInfo != null,
+                    graphicsTranslationInstalled
+                )
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -817,7 +825,10 @@ internal fun RuntimeEngineStatusCard(
     profile: HostCapabilities,
     rootFsImages: List<LinuxRootFsInfo>,
     prootBinaryAvailable: Boolean,
-    box64Installed: Boolean
+    box64Installed: Boolean,
+    wineInstalled: Boolean,
+    winePrefixVerified: Boolean,
+    graphicsTranslationInstalled: Boolean
 ) {
     val vulkan = VulkanProbeParser.parse(profile.nativeVulkanInfo)
     val readiness = RuntimeCompatibilityPlanner.assessWindowsX64(
@@ -826,18 +837,18 @@ internal fun RuntimeEngineStatusCard(
             arm64RootFsInstalled = rootFsImages.any {
                 it.architecture == LinuxRootFsArchitecture.ARM64
             },
-            x86_64WineWow64Installed = false,
-            x86_64RuntimeLibrariesInstalled = false,
+            x86_64WineWow64Installed = wineInstalled,
+            x86_64RuntimeLibrariesInstalled = wineInstalled,
             box64Installed = box64Installed,
             prootInstalled = prootBinaryAvailable,
             displayBridgeInstalled = false,
             audioBridgeInstalled = false,
             inputBridgeInstalled = false,
             d3d11Requested = true,
-            dxvkInstalled = false,
+            dxvkInstalled = graphicsTranslationInstalled,
             vulkan = vulkan,
-            windowsPeLoaderInstalled = false,
-            capsuleDriveMappingInstalled = false,
+            windowsPeLoaderInstalled = wineInstalled,
+            capsuleDriveMappingInstalled = winePrefixVerified,
             physicalDeviceExecutionVerified = false
         )
     )
