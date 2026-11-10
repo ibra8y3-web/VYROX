@@ -41,5 +41,20 @@ void test(void) {
             patch_source("#include <stdio.h>\nint main(void) { return 0; }")
 
 
+    def test_adds_string_header_to_pinned_proot_extension(self):
+        from scripts.patch_android_shmem import patch_proot_memfd_source
+
+        upstream = "#include <stdlib.h>\\n#include <signal.h>\\n"
+        patched = patch_proot_memfd_source(upstream)
+        self.assertIn("#include <string.h>", patched)
+        self.assertEqual(patched, patch_proot_memfd_source(patched))
+
+    def test_rejects_unexpected_proot_extension_source(self):
+        from scripts.patch_android_shmem import patch_proot_memfd_source
+
+        with self.assertRaises(ValueError):
+            patch_proot_memfd_source("#include <stdio.h>\\n")
+
+
 if __name__ == "__main__":
     unittest.main()

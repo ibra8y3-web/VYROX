@@ -107,7 +107,9 @@ done
 # libandroid-shmem assumes glibc's _PATH_TMP exists. Android/Bionic does not
 # provide it; VYROX patches the upstream source to use a private TMPDIR from
 # RuntimeProcessSupervisor instead of a shared global temporary directory.
-python3 "$ROOT/scripts/patch_android_shmem.py" "$SHMEM_SRC/shmem.c"
+python3 "$ROOT/scripts/patch_android_shmem.py" \
+  --proot-source "$PROOT_SRC/src/extension/ashmem_memfd/ashmem_memfd.c" \
+  "$SHMEM_SRC/shmem.c"
 
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
 

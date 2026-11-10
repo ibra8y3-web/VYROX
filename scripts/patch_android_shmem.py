@@ -55,19 +55,39 @@ def patch_source(source: str) -> str:
     return source
 
 
+def patch_proot_memfd_source(source: str) -> str:
+    include = "#include <string.h>"
+    if include in source:
+        return source
+    expected = "#include <stdlib.h>"
+    if source.count(expected) != 1:
+        raise ValueError("Pinned PRoot ashmem_memfd source no longer has the expected standard-library includes.")
+    return source.replace(expected, expected + "\\n" + include, 1)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path, help="Path to the extracted upstream shmem.c")
+    parser.add_argument(
+        "--proot-source",
+        type=Path,
+        required=True,
+        help="Path to the extracted PRoot ashmem_memfd.c",
+    )
     args = parser.parse_args()
 
-    source = args.source
-    if not source.is_file():
-        parser.error(f"Source file does not exist: {source}")
+    for source_path, patch_function in (
+        (args.source, patch_source),
+        (args.proot_source, patch_proot_memfd_source),
+    ):
+        if not source_path.is_file():
+            parser.error(f"Source file does not exist: {source_path}")
+        original = source_path.read_text(encoding="utf-8")
+        patched = patch_function(original)
+        source_path.write_text(patched, encoding="utf-8")
 
-    original = source.read_text(encoding="utf-8")
-    patched = patch_source(original)
-    source.write_text(patched, encoding="utf-8")
-    print(f"Prepared Android app-private TMPDIR support in {source}")
+    print(f"Prepared Android app-private TMPDIR support in {args.source}")
+    print(f"Added the missing standard string declarations in {args.proot_source}")
     return 0
 
 
