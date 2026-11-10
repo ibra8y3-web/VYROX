@@ -90,6 +90,7 @@ internal fun DesktopShell(
     onSearchQueryChange: (String) -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
+    onInstallImportedInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: () -> Unit,
     onDeleteCapsule: (CapsuleInfo) -> Unit,
     onOpenCapsule: (CapsuleInfo) -> Unit,
@@ -284,6 +285,7 @@ internal fun DesktopShell(
                                     onSearchQueryChange = onSearchQueryChange,
                                     onImport = onImport,
                                     onDeleteInstaller = onDeleteInstaller,
+                                    onInstallImportedInstaller = onInstallImportedInstaller,
                                     onCreateCapsule = onCreateCapsule,
                                     onDeleteCapsule = onDeleteCapsule,
                                     onOpenCapsule = onOpenCapsule,
@@ -740,7 +742,7 @@ private fun DesktopPanelContent(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(vxText("VYROX Installer Library"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
-                            "Importing stores an EXE/MSI in private app storage. It does not install or run Windows software until a compatible runtime is integrated.",
+                            "Install an imported EXE/MSI directly into the selected Capsule. VYROX copies it into C:\\Downloads and starts it through that Capsule's verified Wine prefix. ZIP files remain archives.",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         )
                         Button(onClick = onImport, enabled = !isImporting) {
@@ -752,7 +754,14 @@ private fun DesktopPanelContent(
                     Text(vxText("No imported installers."), color = Color(0xFFACB9D0))
                 } else {
                     installers.forEach { installer ->
-                        InstallerRow(installer = installer, onDelete = onDeleteInstaller)
+                        InstallerRow(
+                            installer = installer,
+                            canInstall = selectedCapsule != null &&
+                                winePrefixInfo?.capsuleId == selectedCapsule.id &&
+                                box64Installed && wineInstalled && !isImporting,
+                            onInstall = onInstallImportedInstaller,
+                            onDelete = onDeleteInstaller
+                        )
                     }
                 }
             }
