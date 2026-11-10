@@ -67,7 +67,7 @@ class RuntimeProcessSupervisorTest {
             logs,
             listOf(temporaryFolder.root, File("/usr"))
         ).start(
-            shellPlan(working, listOf("-c", "printf '%s' \"$LD_LIBRARY_PATH\"")),
+            shellPlan(working, listOf("-c", "printf '%s' \"\$LD_LIBRARY_PATH\"")),
             "host-loader"
         )
         val result = process.await(5_000)
