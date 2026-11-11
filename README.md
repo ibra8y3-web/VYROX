@@ -68,12 +68,12 @@ Capsule backups and snapshots are file-level archives. They do not capture a run
 Requirements:
 
 - JDK 17
-- Android SDK Platform 37 and Build Tools 36.0.0
+- Android SDK Platform 36 and Build Tools 36.0.0
 - Android NDK 27.2.12479018
 - CMake 3.22.1
-- Gradle 9.6.0
-- Android Gradle Plugin 9.3.0
-- Kotlin 2.4.21
+- Gradle 8.13
+- Android Gradle Plugin 8.13.2
+- Kotlin 2.2.21
 
 Run from the repository root:
 
