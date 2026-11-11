@@ -45,6 +45,7 @@ import com.vyrox.engine.LinuxRootFsInfo
 import com.vyrox.engine.WinePrefixInfo
 import com.vyrox.runtime.core.capsule.CapsuleFileEntry
 import com.vyrox.runtime.core.capsule.CapsuleInfo
+import com.vyrox.runtime.core.capsule.InstalledWindowsProgram
 import com.vyrox.runtime.core.files.ImportedInstaller
 import com.vyrox.runtime.core.host.HostCapabilities
 
@@ -573,6 +574,7 @@ private fun DesktopPanelContent(
     onSearchQueryChange: (String) -> Unit,
     onImport: () -> Unit,
     onDeleteInstaller: (ImportedInstaller) -> Unit,
+    onInstallImportedInstaller: (ImportedInstaller) -> Unit,
     onCreateCapsule: () -> Unit,
     onDeleteCapsule: (CapsuleInfo) -> Unit,
     onOpenCapsule: (CapsuleInfo) -> Unit,
@@ -622,7 +624,10 @@ private fun DesktopPanelContent(
                     }
                 }
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
+                RuntimeEngineStatusCard(
+                    hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed,
+                    wineInstalled, winePrefixInfo != null, graphicsTranslationInstalled
+                )
             }
 
             DesktopPanel.CAPSULES -> {
@@ -768,7 +773,10 @@ private fun DesktopPanelContent(
 
             DesktopPanel.RUNTIME -> {
                 HostReadinessCard(hostCapabilities)
-                RuntimeEngineStatusCard(hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed)
+                RuntimeEngineStatusCard(
+                    hostCapabilities, rootFsImages, prootBinaryAvailable, box64Installed,
+                    wineInstalled, winePrefixInfo != null, graphicsTranslationInstalled
+                )
             }
         }
 

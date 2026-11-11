@@ -15,8 +15,10 @@ class GraphicsTranslationPlanTest {
                 "/opt/vyrox/prefixes/123e4567-e89b-12d3-a456-426614174000",
                 root
             )
-            assertTrue(script.contains("dxvk-3.1.1.tar.gz"))
-            assertTrue(script.contains("vkd3d-proton-3.1.tar.zst"))
+            assertTrue(script.contains("DXVK_VERSION='3.1.1'"))
+            assertTrue(script.contains("VKD3D_VERSION='3.1'"))
+            assertTrue(script.contains("dxvk-\$DXVK_VERSION.tar.gz"))
+            assertTrue(script.contains("vkd3d-proton-\$VKD3D_VERSION.tar.zst"))
             assertTrue(script.contains("setup_dxvk.sh"))
             assertTrue(script.contains("--with-d3d10 --without-dxgi"))
             assertTrue(script.contains("readlink -f"))
